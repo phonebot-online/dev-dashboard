@@ -1,0 +1,21 @@
+output_html_dir: ./output
+uploads_repo_path: /tmp/dev-dashboard-inputs
+fahad_email: fahad@phonebot.com.au
+domain: devdash.phonebot.co.uk
+
+projects:
+  - name: "Phonebot 2.0"
+    kickoff_date: "2026-04-01"
+    deadline: "2026-07-30"
+    repos: [/tmp/pb-backend, /tmp/pb-frontend]
+    scope_docs: [CLAUDE.md, README.md]
+    items_source: launch-readiness-dashboard.html
+    devs: [faizan@phonebot.com.au]
+
+  - name: "Phonebot HQ"
+    kickoff_date: "2026-04-15"
+    deadline: "2026-05-20"
+    repos: [/tmp/phonebot-hq]
+    scope_docs: [phase1-scope.md]
+    items_source: null
+    devs: [faizan@phonebot.com.au]

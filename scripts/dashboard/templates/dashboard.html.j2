@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dev Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #0e0e12; color: #e6e6e6; padding: 24px; line-height: 1.5; max-width: 1400px; margin: 0 auto; }
+
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+  h1 { font-size: 22px; color: #fff; font-weight: 600; }
+  .subtitle { color: #888; font-size: 13px; margin-top: 4px; }
+
+  .tabs { display: flex; gap: 4px; background: #1a1a22; border-radius: 8px; padding: 4px; }
+  .tab { padding: 10px 18px; background: transparent; border: 0; color: #888; font-size: 13px; cursor: pointer; border-radius: 6px; font-family: inherit; transition: all 0.15s; }
+  .tab:hover { color: #ccc; }
+  .tab.active { background: #2a2a35; color: #fff; }
+
+  .view { display: none; }
+
+  h2 { font-size: 13px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; margin-top: 28px; }
+
+  /* Project sub-tabs */
+  .project-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+  .project-tab { padding: 6px 14px; background: #1a1a22; border: 1px solid #2a2a35; border-radius: 6px; color: #888; font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .project-tab:hover { color: #ccc; border-color: #3a3a48; }
+  .project-tab.active { background: #2a2a35; color: #fff; border-color: #3a3a48; }
+
+  .project-block { display: none; }
+
+  /* Traffic light dot */
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .dot-green { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.4); }
+  .dot-yellow { background: #ffaa00; box-shadow: 0 0 6px rgba(255,170,0,0.4); }
+  .dot-red { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.4); }
+
+  /* Project header card */
+  .project-header { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; margin-bottom: 16px; }
+  .project-title { font-size: 17px; font-weight: 600; color: #fff; margin-bottom: 8px; }
+  .metrics-line { font-size: 13px; color: #aaa; line-height: 1.8; }
+  .metrics-line .accent { color: #ffaa00; font-weight: 600; }
+
+  /* CEO hero */
+  .ceo-hero { background: linear-gradient(135deg, #1a1a22, #22222e); border: 1px solid #333; border-radius: 12px; padding: 48px 24px; text-align: center; margin-bottom: 28px; }
+  .ceo-hero .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+  .ceo-hero .date { font-size: 52px; font-weight: 700; color: #ffaa00; margin-bottom: 12px; letter-spacing: -1px; }
+  .ceo-hero .delta { font-size: 15px; color: #aaa; }
+
+  /* Stat cards */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 16px; }
+  .stat-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+  .stat-value { font-size: 24px; font-weight: 700; color: #fff; }
+  .stat-sub { font-size: 11px; color: #777; margin-top: 4px; }
+
+  /* Top performer card */
+  .top-performer { background: linear-gradient(135deg, #1a220f, #1c2210); border: 1px solid #2a3520; border-left: 4px solid #4ade80; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .top-performer .tp-label { font-size: 11px; color: #4ade80; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; font-weight: 600; }
+  .top-performer .tp-role { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .top-performer .tp-summary { font-size: 13px; color: #aaa; }
+
+  /* Forecast strip */
+  .forecast-strip { background: linear-gradient(135deg, #1a1a22, #22222e); border: 1px solid #333; border-left: 4px solid #ffaa00; padding: 20px 24px; border-radius: 8px; margin-bottom: 28px; }
+  .forecast-strip .big-num { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .forecast-strip .detail { color: #aaa; font-size: 14px; }
+
+  /* Dev panels */
+  .dev-panel { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; margin-bottom: 12px; }
+  .dev-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; gap: 12px; }
+  .dev-name { font-size: 16px; font-weight: 600; color: #fff; }
+  .dev-sub { font-size: 12px; color: #888; margin-top: 2px; }
+  .dev-status { font-size: 13px; white-space: nowrap; }
+  .dev-summary { font-size: 13px; color: #ccc; margin-bottom: 12px; line-height: 1.6; }
+
+  /* Blocker list */
+  .blocker-list { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; margin-bottom: 16px; }
+  .blocker-group { margin-bottom: 14px; }
+  .blocker-group:last-child { margin-bottom: 0; }
+  .blocker-group-title { font-size: 12px; color: #ffaa00; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .blocker-item { font-size: 13px; color: #ccc; padding: 6px 0; border-top: 1px solid #252530; }
+  .blocker-item:first-of-type { border-top: 0; }
+
+  /* Bug / audit lists */
+  .item-list { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; margin-bottom: 16px; }
+  .item-row { font-size: 13px; color: #ccc; padding: 8px 0; border-top: 1px solid #252530; display: flex; justify-content: space-between; gap: 12px; }
+  .item-row:first-child { border-top: 0; padding-top: 0; }
+  .item-row .item-meta { font-size: 11px; color: #666; white-space: nowrap; }
+
+  /* Action log */
+  .action-log { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; margin-bottom: 16px; }
+  .action-item { font-size: 13px; color: #ccc; padding: 10px 0; border-top: 1px solid #2a2a35; display: flex; justify-content: space-between; gap: 12px; }
+  .action-item:first-child { border-top: 0; padding-top: 0; }
+  .action-date { color: #666; font-size: 11px; white-space: nowrap; }
+
+  /* Dev view card */
+  .dev-view-card { background: linear-gradient(135deg, #15151c, #1a1a28); border: 1px solid #2a2a35; border-radius: 12px; padding: 28px; }
+  .dev-view-queue { margin-top: 24px; padding-top: 20px; border-top: 1px solid #2a2a35; }
+  .dev-view-queue-title { color: #ffaa00; font-size: 12px; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .dev-view-queue-item { color: #ccc; font-size: 13px; padding: 6px 0; }
+
+  /* History placeholder */
+  .history-placeholder { background: #15151c; border: 1px dashed #2a2a35; border-radius: 8px; padding: 24px; text-align: center; color: #555; font-size: 13px; margin-top: 16px; }
+
+  /* Empty state */
+  .empty { color: #555; font-size: 13px; font-style: italic; padding: 12px 0; }
+
+  /* Status colours */
+  .status-green { color: #4ade80; font-weight: 600; }
+  .status-yellow { color: #ffaa00; font-weight: 600; }
+  .status-red { color: #f87171; font-weight: 600; }
+
+  .refresh-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 10px 16px; background: #15151c; border: 1px solid #2a2a35; border-radius: 6px; font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Dev Dashboard</h1>
+    <div class="subtitle">Generated {{ generated_at }} &nbsp;&bull;&nbsp; Week {{ week_range }}</div>
+  </div>
+  <div class="tabs" id="role-tabs">
+    {%- for tab in visible_tabs %}
+    <button class="tab{% if loop.first %} active{% endif %}" data-tab="{{ tab }}">{{ tab | upper | replace('_', ' ') }}</button>
+    {%- endfor %}
+  </div>
+</div>
+
+<div class="refresh-bar">
+  <div>{{ role | upper }} view &nbsp;&bull;&nbsp; {{ week_range }}</div>
+</div>
+
+{# ============================================================ #}
+{# ROLE VIEWS                                                    #}
+{# ============================================================ #}
+{%- for tab in visible_tabs %}
+<div class="view" data-view="{{ tab }}"{% if loop.first %} style="display:block"{% else %} style="display:none"{% endif %}>
+
+  {# ---------- Role heading ---------- #}
+  <h2>{{ tab | upper | replace('_', ' ') }} view</h2>
+
+  {# ---------- Project sub-tab strip ---------- #}
+  <div class="project-tabs" id="proj-tabs-{{ tab }}">
+    <button class="project-tab active" data-proj="all" data-view-scope="{{ tab }}">All Projects</button>
+    {%- for project in projects %}
+    <button class="project-tab" data-proj="{{ loop.index0 }}" data-view-scope="{{ tab }}">{{ project.name }}</button>
+    {%- endfor %}
+  </div>
+
+  {# ---------- "All Projects" aggregate block ---------- #}
+  <div class="project-block" data-block="all" data-view-scope="{{ tab }}" style="display:block">
+    {%- if tab == 'ceo' %}
+      {# CEO: hero card + top performer + aggregate counts #}
+      {%- for project in projects %}
+      <div class="ceo-hero" style="margin-bottom:20px">
+        <div class="label">{{ project.name }} — Forecast launch date</div>
+        <div class="date">{{ project.forecast_launch }}</div>
+        <div class="delta">
+          <span class="dot dot-{{ project.traffic_light }}"></span>
+          {{ project.days_remaining }}d remaining &nbsp;&bull;&nbsp; {{ project.total_project_duration }}d total &nbsp;&bull;&nbsp; {{ project.days_of_work_required }}d of work left
+        </div>
+      </div>
+      {%- endfor %}
+      {%- if top_performer %}
+      <div class="top-performer">
+        <div class="tp-label">Top performer this week</div>
+        <div class="tp-role">{{ top_performer.role_label }}</div>
+        <div class="tp-summary">{{ top_performer.summary }}</div>
+      </div>
+      {%- endif %}
+      {%- set bug_ns = namespace(count=0) %}
+      {%- for p in projects %}{% set bug_ns.count = bug_ns.count + (p.qa_bugs | length) %}{% endfor %}
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Team off-project hours</div>
+          <div class="stat-value">{{ team_off_project_hours }}</div>
+          <div class="stat-sub">this week</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Open QA bugs</div>
+          <div class="stat-value">{{ bug_ns.count }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Stuck PRs</div>
+          <div class="stat-value">{{ stuck_prs | length }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Disagreements</div>
+          <div class="stat-value">{{ disagreements | length }}</div>
+        </div>
+      </div>
+    {%- elif tab == 'pm' %}
+      {# PM: forecast strip + all projects overview #}
+      <div class="forecast-strip">
+        <div class="big-num">{{ projects | length }} project(s) tracked &nbsp;&bull;&nbsp; Week {{ week_range }}</div>
+        <div class="detail">{{ team_off_project_hours }}h off-project &nbsp;&bull;&nbsp; {{ stuck_prs | length }} stuck PR(s) &nbsp;&bull;&nbsp; {{ disagreements | length }} disagreement(s)</div>
+      </div>
+      {%- for project in projects %}
+      <div class="project-header">
+        <div class="project-title"><span class="dot dot-{{ project.traffic_light }}"></span>{{ project.name }}</div>
+        <div class="metrics-line">
+          {%- if project.percent_complete is not none %}<span class="accent">{{ project.percent_complete }}%</span> complete &nbsp;&bull;&nbsp; {% endif -%}
+          {{ project.days_remaining }}d remaining &nbsp;&bull;&nbsp; {{ project.total_project_duration }}d total &nbsp;&bull;&nbsp; {{ project.days_of_work_required }}d of work left &nbsp;&bull;&nbsp; forecast {{ project.forecast_launch }}
+        </div>
+      </div>
+      {%- endfor %}
+    {%- elif tab == 'dev' %}
+      {# Dev: per-dev panels for all projects #}
+      {%- for project in projects %}
+      <div class="project-header">
+        <div class="project-title"><span class="dot dot-{{ project.traffic_light }}"></span>{{ project.name }}</div>
+        <div class="metrics-line">
+          {{ project.days_remaining }}d remaining &nbsp;&bull;&nbsp; {{ project.total_project_duration }}d total &nbsp;&bull;&nbsp; {{ project.days_of_work_required }}d of work left &nbsp;&bull;&nbsp; forecast {{ project.forecast_launch }}
+        </div>
+      </div>
+      {%- if project.devs %}
+        {%- for dev in project.devs %}
+        <div class="dev-view-card" style="margin-bottom:12px">
+          <div class="dev-header">
+            <div>
+              <div class="dev-name">{{ dev.name if dev.name is defined else 'Dev' }}</div>
+              <div class="dev-sub">{{ dev.role if dev.role is defined else '' }}</div>
+            </div>
+            <div class="dev-status">
+              {%- if dev.status is defined %}<span class="dot dot-{{ dev.status }}"></span>{{ dev.status }}{% endif %}
+            </div>
+          </div>
+          {%- if dev.summary is defined %}<div class="dev-summary">{{ dev.summary }}</div>{% endif %}
+          {%- if dev.queue is defined and dev.queue %}
+          <div class="dev-view-queue">
+            <div class="dev-view-queue-title">Queue</div>
+            {%- for item in dev.queue %}
+            <div class="dev-view-queue-item">{{ loop.index }}. {{ item }}</div>
+            {%- endfor %}
+          </div>
+          {%- endif %}
+        </div>
+        {%- endfor %}
+      {%- else %}
+        <div class="empty">No dev panels for this project yet.</div>
+      {%- endif %}
+      {%- endfor %}
+    {%- elif tab == 'qa' %}
+      {# QA: bug list across all projects #}
+      {%- for project in projects %}
+      <div class="project-header">
+        <div class="project-title"><span class="dot dot-{{ project.traffic_light }}"></span>{{ project.name }}</div>
+        <div class="metrics-line">{{ project.days_remaining }}d remaining &nbsp;&bull;&nbsp; {{ project.total_project_duration }}d total &nbsp;&bull;&nbsp; {{ project.days_of_work_required }}d of work left</div>
+      </div>
+      <div class="item-list">
+        {%- if project.qa_bugs %}
+          {%- for bug in project.qa_bugs %}
+          <div class="item-row">
+            <span>{{ bug.title if bug.title is defined else bug }}</span>
+            <span class="item-meta">{{ bug.days_open if bug.days_open is defined else '' }}{% if bug.dev is defined %} &nbsp;&bull;&nbsp; {{ bug.dev }}{% endif %}</span>
+          </div>
+          {%- endfor %}
+        {%- else %}
+          <div class="empty">No open QA bugs.</div>
+        {%- endif %}
+      </div>
+      {%- endfor %}
+    {%- elif tab == 'qa_auditor' %}
+      {# QA Auditor: audit list across all projects #}
+      {%- for project in projects %}
+      <div class="project-header">
+        <div class="project-title"><span class="dot dot-{{ project.traffic_light }}"></span>{{ project.name }}</div>
+        <div class="metrics-line">{{ project.days_remaining }}d remaining &nbsp;&bull;&nbsp; {{ project.total_project_duration }}d total &nbsp;&bull;&nbsp; {{ project.days_of_work_required }}d of work left</div>
+      </div>
+      <div class="item-list">
+        {%- if project.qa_audits %}
+          {%- for audit in project.qa_audits %}
+          <div class="item-row">
+            <span>{{ audit.title if audit.title is defined else audit }}</span>
+            <span class="item-meta">{{ audit.commit if audit.commit is defined else '' }}</span>
+          </div>
+          {%- endfor %}
+        {%- else %}
+          <div class="empty">No audit items.</div>
+        {%- endif %}
+      </div>
+      {%- endfor %}
+    {%- endif %}
+
+    {# Shared sections for PM view #}
+    {%- if tab == 'pm' %}
+    {%- if imran_actions %}
+    <h2>PM Actions this week</h2>
+    <div class="action-log">
+      {%- for action in imran_actions %}
+      <div class="action-item">
+        <span>{{ action.text if action.text is defined else action }}</span>
+        <span class="action-date">{{ action.date if action.date is defined else '' }}</span>
+      </div>
+      {%- endfor %}
+    </div>
+    {%- endif %}
+    {%- if stuck_prs %}
+    <h2>Stuck PRs</h2>
+    <div class="item-list">
+      {%- for pr in stuck_prs %}
+      <div class="item-row">
+        <span>{{ pr.title if pr.title is defined else pr }}</span>
+        <span class="item-meta">{{ pr.days if pr.days is defined else '' }}</span>
+      </div>
+      {%- endfor %}
+    </div>
+    {%- endif %}
+    {%- if disagreements %}
+    <h2>Disagreements</h2>
+    <div class="item-list">
+      {%- for d in disagreements %}
+      <div class="item-row">
+        <span>{{ d.text if d.text is defined else d }}</span>
+      </div>
+      {%- endfor %}
+    </div>
+    {%- endif %}
+    {%- endif %}
+  </div>{# end all-projects block #}
+
+  {# ---------- Per-project detail blocks ---------- #}
+  {%- for project in projects %}
+  <div class="project-block" data-block="{{ loop.index0 }}" data-view-scope="{{ tab }}" style="display:none">
+
+    <div class="project-header">
+      <div class="project-title"><span class="dot dot-{{ project.traffic_light }}"></span>{{ project.name }}</div>
+      <div class="metrics-line">
+        {%- if project.percent_complete is not none %}<span class="accent">{{ project.percent_complete }}%</span> complete &nbsp;&bull;&nbsp; {% endif -%}
+        {{ project.days_remaining }}d remaining &nbsp;&bull;&nbsp; {{ project.total_project_duration }}d total &nbsp;&bull;&nbsp; {{ project.days_of_work_required }}d of work left &nbsp;&bull;&nbsp; forecast {{ project.forecast_launch }}
+      </div>
+    </div>
+
+    {%- if tab == 'ceo' %}
+      {# CEO: project-level hero #}
+      <div class="ceo-hero">
+        <div class="label">Forecast launch date</div>
+        <div class="date">{{ project.forecast_launch }}</div>
+        <div class="delta">
+          <span class="dot dot-{{ project.traffic_light }}"></span>
+          {{ project.days_remaining }}d remaining
+        </div>
+      </div>
+      {%- if top_performer %}
+      <div class="top-performer">
+        <div class="tp-label">Top performer this week</div>
+        <div class="tp-role">{{ top_performer.role_label }}</div>
+        <div class="tp-summary">{{ top_performer.summary }}</div>
+      </div>
+      {%- endif %}
+
+    {%- elif tab == 'pm' %}
+      {# PM: dev panels + blockers + lists #}
+      {%- if project.devs %}
+      <h2>Developers this week</h2>
+        {%- for dev in project.devs %}
+        <div class="dev-panel">
+          <div class="dev-header">
+            <div>
+              <div class="dev-name">{{ dev.name if dev.name is defined else 'Dev' }}</div>
+              <div class="dev-sub">{{ dev.role if dev.role is defined else '' }}</div>
+            </div>
+          </div>
+          {%- if dev.summary is defined %}<div class="dev-summary">{{ dev.summary }}</div>{% endif %}
+        </div>
+        {%- endfor %}
+      {%- endif %}
+      {%- if project.blockers %}
+      <h2>Blockers</h2>
+      <div class="blocker-list">
+        {%- for owner, items in project.blockers.items() %}
+        <div class="blocker-group">
+          <div class="blocker-group-title">Waiting on {{ owner }} ({{ items | length }})</div>
+          {%- for item in items %}
+          <div class="blocker-item">{{ item.text if item.text is defined else item }}</div>
+          {%- endfor %}
+        </div>
+        {%- endfor %}
+      </div>
+      {%- endif %}
+      {%- if project.qa_bugs %}
+      <h2>QA Bugs</h2>
+      <div class="item-list">
+        {%- for bug in project.qa_bugs %}
+        <div class="item-row">
+          <span>{{ bug.title if bug.title is defined else bug }}</span>
+          <span class="item-meta">{{ bug.status if bug.status is defined else '' }}</span>
+        </div>
+        {%- endfor %}
+      </div>
+      {%- endif %}
+      {%- if project.feature_requests %}
+      <h2>Feature Requests</h2>
+      <div class="item-list">
+        {%- for fr in project.feature_requests %}
+        <div class="item-row">
+          <span>{{ fr.title if fr.title is defined else fr }}</span>
+        </div>
+        {%- endfor %}
+      </div>
+      {%- endif %}
+
+    {%- elif tab == 'dev' %}
+      {# Dev: per-dev detail #}
+      {%- if project.devs %}
+        {%- for dev in project.devs %}
+        <div class="dev-view-card">
+          <div class="dev-header">
+            <div>
+              <div class="dev-name">{{ dev.name if dev.name is defined else 'Dev' }}</div>
+              <div class="dev-sub">{{ dev.role if dev.role is defined else '' }}</div>
+            </div>
+          </div>
+          {%- if dev.summary is defined %}<div class="dev-summary">{{ dev.summary }}</div>{% endif %}
+          {%- if dev.qa_bugs is defined and dev.qa_bugs %}
+          <div class="dev-view-queue">
+            <div class="dev-view-queue-title">QA bugs attributed to your code</div>
+            {%- for bug in dev.qa_bugs %}
+            <div class="dev-view-queue-item">{{ bug.title if bug.title is defined else bug }}</div>
+            {%- endfor %}
+          </div>
+          {%- endif %}
+          {%- if dev.feature_requests is defined and dev.feature_requests %}
+          <div class="dev-view-queue">
+            <div class="dev-view-queue-title">Feature requests</div>
+            {%- for fr in dev.feature_requests %}
+            <div class="dev-view-queue-item">{{ fr.title if fr.title is defined else fr }}</div>
+            {%- endfor %}
+          </div>
+          {%- endif %}
+          {%- if dev.queue is defined and dev.queue %}
+          <div class="dev-view-queue">
+            <div class="dev-view-queue-title">Your queue</div>
+            {%- for item in dev.queue %}
+            <div class="dev-view-queue-item">{{ loop.index }}. {{ item }}</div>
+            {%- endfor %}
+          </div>
+          {%- endif %}
+          <div class="dev-view-queue">
+            <div class="dev-view-queue-title">4-week history</div>
+            <div class="history-placeholder">History chart — populated after 4 weeks of data.</div>
+          </div>
+        </div>
+        {%- endfor %}
+      {%- else %}
+        <div class="empty">No dev panels yet.</div>
+      {%- endif %}
+
+    {%- elif tab == 'qa' %}
+      {# QA: bug list with detail #}
+      <div class="item-list">
+        {%- if project.qa_bugs %}
+          {%- for bug in project.qa_bugs %}
+          <div class="item-row">
+            <span>{{ bug.title if bug.title is defined else bug }}</span>
+            <span class="item-meta">
+              {{ bug.status if bug.status is defined else '' }}
+              {%- if bug.dev is defined %} &nbsp;&bull;&nbsp; {{ bug.dev }}{% endif %}
+              {%- if bug.days_open is defined %} &nbsp;&bull;&nbsp; {{ bug.days_open }}d open{% endif %}
+            </span>
+          </div>
+          {%- endfor %}
+        {%- else %}
+          <div class="empty">No open QA bugs.</div>
+        {%- endif %}
+      </div>
+
+    {%- elif tab == 'qa_auditor' %}
+      {# QA Auditor: audit list with commit cross-reference #}
+      <div class="item-list">
+        {%- if project.qa_audits %}
+          {%- for audit in project.qa_audits %}
+          <div class="item-row">
+            <span>{{ audit.title if audit.title is defined else audit }}</span>
+            <span class="item-meta">
+              {{ audit.commit if audit.commit is defined else '' }}
+              {%- if audit.item_ref is defined %} &nbsp;&bull;&nbsp; {{ audit.item_ref }}{% endif %}
+            </span>
+          </div>
+          {%- endfor %}
+        {%- else %}
+          <div class="empty">No audit items.</div>
+        {%- endif %}
+      </div>
+    {%- endif %}
+
+  </div>{# end per-project block #}
+  {%- endfor %}
+
+</div>{# end role view #}
+{%- endfor %}
+
+<script>
+(function () {
+  // Role tab switching
+  var roleTabs = document.querySelectorAll('#role-tabs .tab');
+  var roleViews = document.querySelectorAll('.view[data-view]');
+
+  roleTabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      roleTabs.forEach(function (t) { t.classList.remove('active'); });
+      roleViews.forEach(function (v) { v.style.display = 'none'; });
+      tab.classList.add('active');
+      var target = document.querySelector('.view[data-view="' + tab.dataset.tab + '"]');
+      if (target) target.style.display = 'block';
+    });
+  });
+
+  // Project sub-tab switching (scoped per role view)
+  document.querySelectorAll('.project-tab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var scope = btn.dataset.viewScope;
+      // deactivate sibling tabs
+      document.querySelectorAll('.project-tab[data-view-scope="' + scope + '"]').forEach(function (t) {
+        t.classList.remove('active');
+      });
+      // hide all project blocks in this scope
+      document.querySelectorAll('.project-block[data-view-scope="' + scope + '"]').forEach(function (b) {
+        b.style.display = 'none';
+      });
+      btn.classList.add('active');
+      var projKey = btn.dataset.proj;
+      var block = document.querySelector('.project-block[data-block="' + projKey + '"][data-view-scope="' + scope + '"]');
+      if (block) block.style.display = 'block';
+    });
+  });
+}());
+</script>
+
+</body>
+</html>

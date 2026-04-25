@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Phonebot Dev Dashboard — Wireframe</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #0e0e12; color: #e6e6e6; padding: 24px; line-height: 1.5; max-width: 1400px; margin: 0 auto; }
+
+  .wireframe-banner { background: #2a1f00; color: #ffcc44; text-align: center; padding: 10px; font-size: 12px; font-weight: 600; border: 1px dashed #5a4500; margin-bottom: 24px; border-radius: 4px; letter-spacing: 0.5px; }
+
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+  h1 { font-size: 22px; color: #fff; font-weight: 600; }
+  .subtitle { color: #888; font-size: 13px; margin-top: 4px; }
+  .tabs { display: flex; gap: 4px; background: #1a1a22; border-radius: 8px; padding: 4px; }
+  .tab { padding: 10px 18px; background: transparent; border: 0; color: #888; font-size: 13px; cursor: pointer; border-radius: 6px; font-family: inherit; transition: all 0.15s; }
+  .tab:hover { color: #ccc; }
+  .tab.active { background: #2a2a35; color: #fff; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .annotation { background: #2a1f00; color: #ffcc44; padding: 10px 14px; border-radius: 4px; font-size: 12px; font-style: italic; margin: 0 0 20px 0; border-left: 3px solid #ffaa00; }
+
+  /* CEO hero */
+  .ceo-hero { background: linear-gradient(135deg, #1a1a22, #22222e); border: 1px solid #333; border-radius: 12px; padding: 48px 24px; text-align: center; margin-bottom: 28px; }
+  .ceo-hero .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+  .ceo-hero .date { font-size: 52px; font-weight: 700; color: #ffaa00; margin-bottom: 12px; letter-spacing: -1px; }
+  .ceo-hero .delta { font-size: 15px; color: #aaa; }
+  .status-yellow { color: #ffaa00; font-weight: 600; }
+  .status-green { color: #4ade80; font-weight: 600; }
+  .status-red { color: #f87171; font-weight: 600; }
+
+  /* Forecast strip (PM view) */
+  .forecast-strip { background: linear-gradient(135deg, #1a1a22, #22222e); border: 1px solid #333; border-left: 4px solid #ffaa00; padding: 20px 24px; border-radius: 8px; margin-bottom: 28px; }
+  .forecast-strip .big-num { font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .forecast-strip .detail { color: #aaa; font-size: 14px; }
+
+  h2 { font-size: 13px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; margin-top: 28px; }
+
+  /* Milestones */
+  .milestones { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .milestone { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; }
+  .milestone-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .milestone-title h3 { font-size: 14px; color: #fff; font-weight: 600; }
+  .milestone-date { font-size: 11px; color: #666; white-space: nowrap; }
+  .milestone-progress { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .milestone-progress .of { color: #555; font-size: 14px; font-weight: 400; }
+  .milestone-pace { font-size: 12px; color: #bbb; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .dot-green { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.4); }
+  .dot-yellow { background: #ffaa00; box-shadow: 0 0 6px rgba(255,170,0,0.4); }
+  .dot-red { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.4); }
+  .milestone-items { margin-top: 12px; padding-top: 12px; border-top: 1px solid #2a2a35; font-size: 11px; color: #777; line-height: 1.6; }
+
+  /* Per-dev panels */
+  .dev-panel { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; margin-bottom: 12px; }
+  .dev-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; gap: 12px; }
+  .dev-name { font-size: 16px; font-weight: 600; color: #fff; }
+  .dev-sub { font-size: 12px; color: #888; margin-top: 2px; }
+  .dev-status { font-size: 13px; white-space: nowrap; }
+  .dev-summary { font-size: 13px; color: #ccc; margin-bottom: 12px; line-height: 1.6; }
+  .dev-commits { font-size: 12px; color: #aaa; }
+  .dev-commits .commit { padding: 8px 0; border-top: 1px solid #2a2a35; }
+  .dev-commits .commit:first-child { border-top: 0; }
+  .dev-commits .audited { color: #4ade80; font-size: 11px; margin-left: 4px; }
+  .why-link { color: #ffaa00; font-size: 11px; text-decoration: none; margin-left: 6px; cursor: pointer; }
+  .why-link:hover { text-decoration: underline; }
+
+  /* Blockers */
+  .blocker-list { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; }
+  .blocker-group { margin-bottom: 18px; }
+  .blocker-group:last-child { margin-bottom: 0; }
+  .blocker-group-title { font-size: 12px; color: #ffaa00; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .blocker-item { font-size: 13px; color: #ccc; padding: 6px 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid #252530; }
+  .blocker-item:first-of-type { border-top: 0; }
+  .blocker-days { color: #f87171; font-size: 11px; white-space: nowrap; }
+  .blocker-days.soft { color: #888; }
+
+  /* Action log */
+  .action-log { background: #15151c; border: 1px solid #2a2a35; border-radius: 8px; padding: 18px; }
+  .action-item { font-size: 13px; color: #ccc; padding: 10px 0; border-top: 1px solid #2a2a35; display: flex; justify-content: space-between; gap: 12px; }
+  .action-item:first-child { border-top: 0; padding-top: 0; }
+  .action-date { color: #666; font-size: 11px; white-space: nowrap; }
+
+  /* Dev view */
+  .dev-view-card { background: linear-gradient(135deg, #15151c, #1a1a28); border: 1px solid #2a2a35; border-radius: 12px; padding: 28px; }
+  .dev-view-queue { margin-top: 24px; padding-top: 20px; border-top: 1px solid #2a2a35; }
+  .dev-view-queue-title { color: #ffaa00; font-size: 12px; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .dev-view-queue-item { color: #ccc; font-size: 13px; padding: 6px 0; }
+
+  /* Why modal */
+  .why-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .why-modal.active { display: flex; }
+  .why-modal-content { background: #1a1a22; border: 1px solid #2a2a35; border-radius: 10px; padding: 28px; max-width: 640px; width: 100%; }
+  .why-modal h3 { color: #fff; font-size: 16px; margin-bottom: 14px; }
+  .why-modal p { color: #ccc; font-size: 13px; margin-bottom: 10px; line-height: 1.6; }
+  .why-modal pre { background: #0e0e12; padding: 14px; border-radius: 6px; font-size: 11px; color: #aaa; overflow-x: auto; margin: 10px 0; white-space: pre-wrap; line-height: 1.7; border: 1px solid #252530; }
+  .why-modal button { background: #2a2a35; color: #fff; border: 0; padding: 10px 18px; border-radius: 6px; cursor: pointer; margin-top: 14px; font-family: inherit; font-size: 13px; }
+  .why-modal button:hover { background: #3a3a48; }
+
+  .refresh-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 10px 16px; background: #15151c; border: 1px solid #2a2a35; border-radius: 6px; font-size: 12px; color: #888; }
+  .refresh-btn { background: #2a2a35; color: #fff; border: 0; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="wireframe-banner">WIREFRAME — numbers and names are placeholder. We're deciding on the structure, not the visual polish.</div>
+
+<div class="header">
+  <div>
+    <h1>Phonebot Dev Dashboard</h1>
+    <div class="subtitle">Apr 23, 2026 • 98 days to July 30 launch</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-view="ceo">CEO view (Fahad)</button>
+    <button class="tab" data-view="pm">PM view (Imran)</button>
+    <button class="tab" data-view="dev">Dev view (Faisal)</button>
+  </div>
+</div>
+
+<div class="refresh-bar">
+  <div>Last refreshed Sunday Apr 20, 23:00 &nbsp;•&nbsp; next auto-refresh Sunday Apr 27, 23:00</div>
+  <button class="refresh-btn">Refresh now</button>
+</div>
+
+<!-- ==================== CEO VIEW ==================== -->
+<div id="ceo" class="view active">
+  <div class="annotation">Open once a week. Read one number. Close the tab.</div>
+
+  <div class="ceo-hero">
+    <div class="label">Forecast launch date</div>
+    <div class="date">August 14, 2026</div>
+    <div class="delta">15 days past July 30 deadline &nbsp;•&nbsp; <span class="status-yellow">Yellow — slipping</span></div>
+  </div>
+
+  <h2>Why it's slipping</h2>
+  <div class="milestones">
+    <div class="milestone">
+      <div class="milestone-title"><h3>Payment Gateways</h3><span class="milestone-date">Due May 20</span></div>
+      <div class="milestone-progress">2<span class="of">/6</span></div>
+      <div class="milestone-pace"><span class="dot dot-green"></span>On pace</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-title"><h3>Admin Panel Repair</h3><span class="milestone-date">Due May 31</span></div>
+      <div class="milestone-progress">0<span class="of">/8</span></div>
+      <div class="milestone-pace"><span class="dot dot-red"></span>Behind — not started</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-title"><h3>SEO Migration</h3><span class="milestone-date">Due Jun 15</span></div>
+      <div class="milestone-progress">0<span class="of">/5</span></div>
+      <div class="milestone-pace"><span class="dot dot-yellow"></span>Not started, still time</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-title"><h3>Launch Ops</h3><span class="milestone-date">Due Jul 10</span></div>
+      <div class="milestone-progress">0<span class="of">/7</span></div>
+      <div class="milestone-pace"><span class="dot dot-yellow"></span>Not started, still time</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-title"><h3>Final QA + Cutover</h3><span class="milestone-date">Due Jul 25</span></div>
+      <div class="milestone-progress">0<span class="of">/4</span></div>
+      <div class="milestone-pace"><span class="dot dot-yellow"></span>Blocked until prior milestones</div>
+    </div>
+  </div>
+
+  <div class="annotation" style="margin-top: 24px;">Want detail? Switch to PM view (top right) for per-dev status, blockers, and Imran's weekly activity.</div>
+</div>
+
+<!-- ==================== PM VIEW ==================== -->
+<div id="pm" class="view">
+  <div class="annotation">Imran opens this Monday morning. His job: act on red. Call devs. Chase blockers. Escalate decisions sitting on Fahad's desk.</div>
+
+  <div class="forecast-strip">
+    <div class="big-num">34 of 48 items left • launch forecast: August 14</div>
+    <div class="detail">15 days past July 30 deadline. <span class="status-yellow">Yellow.</span> Pace this week: 3 items. Pace needed: 2.8/wk.</div>
+  </div>
+
+  <h2>Milestones</h2>
+  <div class="milestones">
+    <div class="milestone">
+      <div class="milestone-title"><h3>Payment Gateways</h3><span class="milestone-date">Due May 20</span></div>
+      <div class="milestone-progress">2<span class="of">/6</span></div>
+      <div class="milestone-pace"><span class="dot dot-green"></span>On pace — 2 items/week needed</div>
+      <div class="milestone-items"><strong style="color:#ccc">Open:</strong> P0-03 CyberSource webhook sig, P0-13 payment amount validation, P0-15 Zip webhook, P0-22 prod endpoint switch, P0-23 PayPal webhook. &nbsp;<strong style="color:#4ade80">Done:</strong> R0-09, R0-10.</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-title"><h3>Admin Panel Repair</h3><span class="milestone-date">Due May 31</span></div>
+      <div class="milestone-progress">0<span class="of">/8</span></div>
+      <div class="milestone-pace"><span class="dot dot-red"></span>Behind — 8 items, 5 weeks left</div>
+      <div class="milestone-items">P0-18 money precision, P0-24 admin emails, P0-25 POS inventory, P0-27 IMEI + returns, Afterpay models, PayPal webhook, Zip webhook, stock decrement.</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-title"><h3>SEO Migration</h3><span class="milestone-date">Due Jun 15</span></div>
+      <div class="milestone-progress">0<span class="of">/5</span></div>
+      <div class="milestone-pace"><span class="dot dot-yellow"></span>Not started — 5 items, 8 weeks</div>
+      <div class="milestone-items">7,601 URL aliases → 301 redirects, sitemap XML, Google Merchant feed, hreflang, canonical cleanup.</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-title"><h3>Launch Ops</h3><span class="milestone-date">Due Jul 10</span></div>
+      <div class="milestone-progress">0<span class="of">/7</span></div>
+      <div class="milestone-pace"><span class="dot dot-yellow"></span>Not started — 7 items, 11 weeks</div>
+      <div class="milestone-items">Sentry, rollback playbook, load test, 24 secrets rotation (12 NEXT_PUBLIC_* + 12 legacy), env() → config() sweep.</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-title"><h3>Final QA + Cutover</h3><span class="milestone-date">Due Jul 25</span></div>
+      <div class="milestone-progress">0<span class="of">/4</span></div>
+      <div class="milestone-pace"><span class="dot dot-yellow"></span>Blocked until prior milestones ship</div>
+    </div>
+  </div>
+
+  <h2>Developers this week</h2>
+  <div class="dev-panel">
+    <div class="dev-header">
+      <div>
+        <div class="dev-name">Faisal</div>
+        <div class="dev-sub">Lead dev • Pakistan • week of Apr 21–27</div>
+      </div>
+      <div class="dev-status"><span class="dot dot-green"></span><strong>3 of 2 target</strong> — ahead</div>
+    </div>
+    <div class="dev-summary">
+      Shipped R0-09 order-status HMAC hardening, R0-10 returns/track-order rate-limiting, and rebuilt the order confirmation email template. Claude audited all three against actual code — commit messages match what the code does.
+      <a class="why-link" onclick="showWhy()">why this says "audited"?</a>
+    </div>
+    <div class="dev-commits">
+      <div class="commit">• Apr 21 — <strong style="color:#ddd">R0-09</strong> HMAC token on /api/checkout/order-status. Throttle 30/min. Unified 403. <span class="audited">✓ audited</span></div>
+      <div class="commit">• Apr 22 — <strong style="color:#ddd">R0-10</strong> Throttle 5/min on verifyCustomerOrder + trackOrder. Email oracle closed. <span class="audited">✓ audited</span></div>
+      <div class="commit">• Apr 23 — <strong style="color:#ddd">Email redesign</strong> order confirmation template rebuilt in login-modal style. Arabic bilingual preserved. <span class="audited">✓ audited</span></div>
+    </div>
+  </div>
+
+  <div class="two-col" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:24px;">
+    <div>
+      <h2 style="margin-top:0">Blocker queue</h2>
+      <div class="blocker-list">
+        <div class="blocker-group">
+          <div class="blocker-group-title">Waiting on Fahad (3)</div>
+          <div class="blocker-item"><span>R0-06 — approve secret rotation window</span><span class="blocker-days">stuck 4 days</span></div>
+          <div class="blocker-item"><span>CyberSource credentials — who owns merchant portal?</span><span class="blocker-days">stuck 5 days</span></div>
+          <div class="blocker-item"><span>P0-29 migration sign-off (zero-duplicate SQL check)</span><span class="blocker-days">stuck 4 days</span></div>
+        </div>
+        <div class="blocker-group">
+          <div class="blocker-group-title">Waiting on Faizan (1)</div>
+          <div class="blocker-item"><span>Afterpay models — do they exist in 1.0?</span><span class="blocker-days">stuck 4 days</span></div>
+        </div>
+        <div class="blocker-group">
+          <div class="blocker-group-title">External / pre-launch (2)</div>
+          <div class="blocker-item"><span>Apple Sign-In — private key rotation</span><span class="blocker-days soft">pre-launch</span></div>
+          <div class="blocker-item"><span>12 legacy secrets (eBay, Google SA, reCAPTCHA, etc.)</span><span class="blocker-days soft">pre-launch</span></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2 style="margin-top:0">Imran's action log this week</h2>
+      <div class="action-log">
+        <div class="action-item">
+          <span>Chased Faisal on R0-06 rotation status</span>
+          <span class="action-date">Tue Apr 21</span>
+        </div>
+        <div class="action-item">
+          <span>Escalated Apple key rotation decision to Fahad</span>
+          <span class="action-date">Wed Apr 22</span>
+        </div>
+        <div class="action-item">
+          <span>Confirmed Faisal branch merged after R0-10 audit</span>
+          <span class="action-date">Wed Apr 22</span>
+        </div>
+        <div class="action-item">
+          <span>Asked Faizan about Afterpay models in 1.0</span>
+          <span class="action-date">Thu Apr 23</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DEV VIEW ==================== -->
+<div id="dev" class="view">
+  <div class="annotation">Faisal (or any dev) sees only his own week — what he closed, what's on him next. No noise.</div>
+
+  <div class="dev-view-card">
+    <div class="dev-header">
+      <div>
+        <div class="dev-name" style="font-size:20px;">Faisal</div>
+        <div class="dev-sub">Week of Apr 21–27</div>
+      </div>
+      <div class="dev-status"><span class="dot dot-green"></span><strong style="font-size:15px; color:#4ade80;">Green — 3 of 2 target</strong></div>
+    </div>
+
+    <div class="dev-summary" style="margin: 16px 0; font-size: 14px;">
+      You closed R0-09 (order-status HMAC), R0-10 (returns rate-limit), and the order confirmation email rebuild this week. Target was 2 items. You're ahead. Nice work.
+    </div>
+
+    <div class="dev-view-queue">
+      <div class="dev-view-queue-title">Your queue for next week</div>
+      <div class="dev-view-queue-item">1. <strong>P0-13</strong> — payment amount validation across all 4 gateways</div>
+      <div class="dev-view-queue-item">2. <strong>P0-15</strong> — Zip webhook signature validation</div>
+      <div class="dev-view-queue-item">3. <strong>P0-23</strong> — PayPal webhook signature validation (if time)</div>
+    </div>
+
+    <div class="dev-view-queue">
+      <div class="dev-view-queue-title">Your commits this week (auto-pulled)</div>
+      <div class="dev-commits">
+        <div class="commit">• Apr 21 — <strong style="color:#ddd">R0-09</strong> HMAC token on /api/checkout/order-status. Throttle 30/min. <span class="audited">✓ audited</span></div>
+        <div class="commit">• Apr 22 — <strong style="color:#ddd">R0-10</strong> Throttle 5/min on verifyCustomerOrder + trackOrder. <span class="audited">✓ audited</span></div>
+        <div class="commit">• Apr 23 — <strong style="color:#ddd">Email redesign</strong> order confirmation template. <span class="audited">✓ audited</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== WHY MODAL ==================== -->
+<div id="whyModal" class="why-modal">
+  <div class="why-modal-content">
+    <h3>Why Claude scored this "✓ audited"</h3>
+    <p><strong>Claim from commit message:</strong> Faisal said he shipped R0-09 order-status HMAC hardening.</p>
+    <p><strong>Claude's audit, Apr 21, 23:04:</strong></p>
+<pre>1. Read pb-backend/app/Http/Controllers/Api/v1/CheckoutController.php
+2. Verified generateOrderToken() uses hash_hmac('sha256', ...)
+3. Verified attachOrderToken() wraps response with order_token
+4. Verified orderStatus() uses hash_equals() for timing-safe compare
+5. Verified both miss paths collapse to single 403 (no enum oracle)
+6. Read pb-backend/routes/api.php
+7. Verified throttle:30,1 applied to the route
+
+Conclusion: commit message matches the code. Item R0-09 genuinely done.</pre>
+    <p style="font-size: 11px; color: #666;">Linked: <a href="#" style="color:#ffaa00">commit 8f4d92a</a> &nbsp;•&nbsp; <a href="#" style="color:#ffaa00">diff vs main</a></p>
+    <button onclick="hideWhy()">Close</button>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById(tab.dataset.view).classList.add('active');
+      tab.classList.add('active');
+    });
+  });
+  function showWhy() { document.getElementById('whyModal').classList.add('active'); }
+  function hideWhy() { document.getElementById('whyModal').classList.remove('active'); }
+  document.getElementById('whyModal').addEventListener('click', e => {
+    if (e.target.id === 'whyModal') hideWhy();
+  });
+</script>
+
+</body>
+</html>

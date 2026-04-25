@@ -1,0 +1,17 @@
+name = "devdash"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+
+# Replace <FILL_AFTER_KV_CREATE> with the id returned from:
+#   wrangler kv:namespace create DASHBOARD_KV
+[[kv_namespaces]]
+binding = "DASHBOARD_KV"
+id = "<FILL_AFTER_KV_CREATE>"
+
+[[routes]]
+pattern = "devdash.phonebot.co.uk/*"
+zone_name = "phonebot.co.uk"
+
+# Daily cron at 13:00 UTC (~midnight AWST / 6am PKT / 11pm UK the day before)
+[triggers]
+crons = ["0 13 * * *"]

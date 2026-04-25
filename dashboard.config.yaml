@@ -1,0 +1,19 @@
+output_html_dir: ./output
+uploads_repo_path: /Users/adminadmin/Downloads/phonebot revamp/dev dashboard/dev-dashboard-inputs
+fahad_email: fahad@phonebot.com.au
+domain: devdash.phonebot.co.uk
+
+projects:
+  - name: "Phonebot 2.0"
+    kickoff_date: "2026-04-01"
+    deadline: "2026-07-30"
+    repos:
+      - /Users/adminadmin/Downloads/phonebot revamp/phonebot 2.0/pb-backend
+      - /Users/adminadmin/Downloads/phonebot revamp/phonebot 2.0/pb-frontend
+    scope_docs:
+      - CLAUDE.md
+      - README-for-new-claude.md
+      - 02-architecture-and-audits/Apr20_State_Overlay.md
+    items_source: launch-readiness-dashboard.html
+    devs:
+      - faizan@phonebot.com.au

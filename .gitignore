@@ -1,0 +1,16 @@
+# Dev Dashboard output
+weekly-dashboard.html
+quarterly-review-*.html
+dashboard-data/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Cloudflare Worker build artifacts
+worker/node_modules/
+worker/.wrangler/
+worker/dist/
+
+# macOS
+.DS_Store
+**/.DS_Store
