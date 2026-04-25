@@ -2,6 +2,183 @@
 
 Append-only log of material changes to the dev dashboard. Newest on top.
 
+Each entry below carries explicit **Test:** recipes per fix so this changelog doubles as the
+manual-QA script for the dashboard. Walk top-to-bottom on a fresh browser to regression-test.
+
+---
+
+## 2026-04-25/26 — Pre-AWS-launch hardening pass: persistence, reactivity, dead-settings wiring
+
+Single-file SPA (`devdash.html`) hardened for the AWS static deploy. Every config field in Settings
+either fires client-side or is honestly labelled `SERVER` (requires AWS pipeline). Persistence,
+reactivity, and contributor flows audited end-to-end.
+
+### Functional fixes
+
+- **C2** `submitOffProject()` now calls `save('devMockData')` and init merges persisted devMockData
+  over the in-memory seed (so seed devs aren't lost on upgrade). Off-project hours now survive
+  reload.
+  - **Test:** As a dev (Faizan), click "+ Log off-project", enter `2` hours + a description, submit
+    → reload page → off-project counter under the compass shows the same value.
+- **M1** Single-flight `_guard()` helper (1500ms TTL) applied to `submitBug`, `submitAudit`,
+  `submitFeature`, `submitOffProject`, `submitPmAssessment`, `submitDispute`, `addBlocker`. Blocks
+  rapid double-clicks even if `:disabled` reactivity hasn't propagated.
+  - **Test:** As QA, fill new-bug form, double-click "Submit bug" rapidly → only one bug appears in
+    the queue (no duplicate).
+- **M2** QR `<img>` for login + Settings → Users now has `@error="qrFailed = true"` fallback
+  showing the otpauth URL as text so users can paste manually if `api.qrserver.com` is blocked.
+  - **Test:** Block `api.qrserver.com` in DevTools (Network → block request URL) → reload → on
+    login screen, pick a user, click "I've scanned it" with code `123456` → fallback panel shows
+    the otpauth URL instead of a broken image.
+- **H4** `emptyDev()` returns `_isEmpty: true`. Dev view shows an amber "No activity data yet"
+  banner above the all-zero compass when this flag is present.
+  - **Test:** Settings → Users → Add new user (any role: dev) → CEO/PM clicks View profile on the
+    new user → amber banner appears above the compass.
+- **H5** `regressionCandidates` now carry a `project` field (UI select inline on each row +
+  default-to-active-project on add + scoped filter via `filteredRegressionCandidates()` +
+  `migrateConfig` backfill for old records).
+  - **Test:** Filter dashboard to "Phonebot 2.0" → PM view → "+ Log regression" → new row has
+    project pre-set to Phonebot 2.0 → switch project filter to "Phonebot HQ" → only HQ + untagged
+    regressions show.
+- **H7 / PROB-1 / PROB-2** Added `Probation ends` date column to Settings → Users (saves on
+  change). `addUser()` derives `probation_end = today + new_hire_probation_weeks * 7` so the
+  reward-skip path in `composeWeeklyRewards` actually fires.
+  - **Test:** Settings → Rewards → set "New-hire probation (weeks)" to `2` → Settings → Users →
+    "+ Add new user" → newly-created row has Probation ends = today + 14 days. Manually edit any
+    existing user's probation date → reload → date persists.
+- **BUG-CONTRIB-1** CEO + PM project portfolio cards now render contributor name chips next to
+  the Owner line, so contributor changes in Settings → Projects are visible without opening the
+  project detail modal.
+  - **Test:** Settings → Projects → Phonebot 2.0 → tick a contributor checkbox → CEO view →
+    Phonebot 2.0 card shows the contributor's name as a small grey chip immediately.
+- **BUG-CONTRIB-2** `setProjectOwner(p, newEmail)` removes the new owner from `contributor_emails`
+  (no more ghost duplicates where one person was simultaneously listed as Owner AND Contributor).
+  - **Test:** Settings → Projects → Phonebot 2.0 → Contributors: tick Moazzam → change Owner from
+    Faizan to Moazzam → contributors checkbox grid no longer shows Moazzam (he's been promoted to
+    Owner cleanly). Project detail modal Team section shows Moazzam only as Owner, not duplicated.
+- **BUG-CONTRIB-3** `removeUser()` calls `saveConfig()` explicitly at the end (was relying on the
+  250ms debounced deep watch, which leaves a refresh-during-debounce race window).
+  - **Test:** Settings → Users → click × next to any non-CEO user → confirm → immediately reload
+    page (don't wait) → user remains removed; their cascaded reassignments persist.
+
+### Wired previously-dead settings (every Settings field now either fires or is labelled SERVER)
+
+- **VIS-1 / VIS-2** `scoring.visibility.self` (live | weekly | shape_only | opaque) and
+  `scoring.visibility.peer` (shapes | shapes_only | none) now actually control compass display.
+  CEO/PM/QA/QA-Auditor still see everything (visibility rule applies only to dev role). An amber
+  italic note explains why something is hidden.
+  - **Test:** Log in as a dev (Faizan) → Settings → Scoring → set "Dev sees own compass" to
+    "Shape only" → flip to Dev view → score numbers replaced with `—`, shape still drawn, amber
+    note explains why. Set to "Opaque" → entire compass body hidden with a centered notice. Log
+    in as CEO → same dev view → all numbers visible regardless of setting.
+- **ABS-1** `composeWeeklyRewards` now reads `daysWorkedThisWeek(email)` (counts weekday
+  `clockEntries` keys, falls back to 5) and applies `absence_rule`: `full` ignores absence,
+  `pro_rated` scales linearly, `forfeit` returns no events if any day is missing.
+  - **Test:** Set Settings → Rewards → Absence rule = `forfeit` → "✨ Compose this week's rewards"
+    → no events for any dev who has missing clockEntries (or all-5 if no clockEntries exist).
+    Switch to `pro_rated` → re-compose → events appear with `Pro-rated × N/5` notes.
+- **GROWTH-1** Growth events composed when `compassDelta(dev, direction) ≥ growth_min_delta`.
+  `growth_bonus_rule = independent` pays regardless of new score; `threshold_only` requires the
+  new score to also be ≥ direction threshold.
+  - **Test:** Settings → Rewards → set growth_aud to e.g. `25000`, growth_min_delta `5` →
+    "Compose this week's rewards" → check rewardEvents for `type: 'growth'` events with
+    `note: '+N pts on <direction>'`. Switch growth_bonus_rule to `threshold_only` → only fires
+    for directions where dev's score is also ≥ threshold.
+- **OWNER-1** `composeWeeklyRewards` adds `owner_bonus` events when a dev owns a project that is
+  `traffic_light: green` AND `forecast_launch ≤ deadline + owner_bonus_grace_days`. Amount =
+  `owner_bonus_pct % of true_north_aud`, idempotent per project.
+  - **Test:** Settings → Projects → Phonebot HQ (already green) → set forecast_launch `2026-05-18`,
+    deadline `2026-05-20`, grace_days `0` → Compose → Moazzam (HQ owner) gets one
+    `type: 'owner_bonus'` event for HQ. Re-compose → no duplicate (idempotent).
+- **POOL-1** `composeTeamPoolEvents()` distributes `team_pool_aud` once per crossed unlock
+  threshold according to `team_pool_split`: `equal` (per active dev), `weighted` (by strong
+  directions count), `true_north_only` (TN devs only), `owner_decides` (one unallocated event for
+  CEO to split manually).
+  - **Test:** Settings → Rewards → team_pool_split = `equal` → portfolio %  crosses next threshold
+    (e.g. average % >= 50) → Compose → each active dev gets a `type: 'team_pool'` pending event of
+    equal amount. Switch to `true_north_only` → next compose → only devs with all 4 directions
+    unlocked get the slice.
+- **CYCLE-1** CEO payout banner predicate is now `isPayoutDueToday()` which respects
+  `payout_cycle`: `monthly` fires on `payout_day`, `weekly` on Mondays, `quarterly` on day 1 of
+  Jan/Apr/Jul/Oct, `ad_hoc` never auto-fires.
+  - **Test:** Settings → Rewards → payout_cycle = `weekly` → CEO view → red "Payout day" banner
+    shows on Mondays (otherwise hidden). Switch to `ad_hoc` → banner never shows automatically;
+    CEO must open Rewards manually.
+- **SYS-2** New top-of-page weekly audit reminder banner appears for CEO + PM on the day matching
+  `system.weekly_audit_day`. Click "Open Rewards →" jumps to Settings → Rewards.
+  - **Test:** Settings → System → set "Full weekly audit day" to today's day → page top now shows
+    an amber banner "📅 Weekly audit day". Change to a different day → banner disappears.
+
+### Honesty fixes (no behaviour change but stops the panel from lying)
+
+- Login screen: blue disclaimer "Internal tool — TOTP scan is decorative until the AWS backend
+  lands. Any 6-digit code will let you in." Same disclaimer in Settings → Users via the QR card.
+- Settings → System → new "Wipe all dashboard data (go-live)" danger button. Two confirms. Clears
+  every `devdash_*` localStorage key. Use ONCE before launch to clear demo seeds.
+- `backend-badge` `SERVER` chip + inline note added to: `system.daily_pull`, `system.context.*`
+  (3 fields), `system.snapshots.*` (3 fields), `system.aws.*` (4 fields). These don't fire
+  client-side and now say so.
+- Project detail modal → readiness checklist now carries a `MANUAL` badge with inline note:
+  "Manual-by-design — most readiness items (e.g. 'QA sign-off', 'rollback tested') are human
+  judgments. CI-detectable items will auto-tick once the AWS pipeline is wired." Stops CEO from
+  expecting auto-magic ticking that doesn't exist yet.
+
+### Settings panel — every field's status
+
+| Field | Wired | Notes |
+|---|---|---|
+| `system.severity_labels`, `urgency_labels` | ✓ | Drives bug/feature form selects |
+| `system.timezone` | ✓ | Live clock |
+| `system.weekly_audit_day` | ✓ | New SYS-2 banner |
+| `payout_day`, `monthly_budget_ceiling`, `payout_cycle`, `require_dual_approval` | ✓ | Banner + over-budget warning + cycle gate |
+| `currency`, `unlock_thresholds`, `per_direction_aud`, `true_north_aud`, `growth_aud`, `team_pool_aud` | ✓ | Reward composition + payout flow |
+| `scoring.directions.*.label/.threshold`, `handoff_multiplier.*`, `traffic.*` | ✓ | Compass + signal + coaching |
+| `scoring.visibility.self`, `.peer` | ✓ NEW | VIS-1/2 |
+| `rewards.absence_rule` | ✓ NEW | ABS-1 via clockEntries |
+| `rewards.new_hire_probation_weeks` + `users[].probation_end` | ✓ NEW | PROB-1/2 |
+| `rewards.growth_bonus_rule`, `growth_min_delta` | ✓ NEW | GROWTH-1 |
+| `rewards.owner_bonus_pct`, `owner_bonus_grace_days` | ✓ NEW | OWNER-1 |
+| `rewards.team_pool_split` | ✓ NEW | POOL-1 |
+| `rewards.termination_rule` | ✓ | Used by removeUser cascade |
+| `rewards.payout_reminder` (push portion) | ⚠ banner only | Push needs backend |
+| `system.daily_pull` | ⚠ SERVER badge | Needs AWS daily Lambda |
+| `system.context.*`, `system.snapshots.*`, `system.aws.*` | ⚠ SERVER badge | Pure config; consumed when backend lands |
+
+### Still open (documented, not built — would require backend or significant new work)
+
+- **Real auth (C1).** Any 6-digit code logs in as the picked user. Mitigated by the explicit
+  disclaimer on login + Users tab. Real fix needs either a backend with TOTP verify, or
+  Cloudflare Access / Cognito / similar in front.
+- **Synthetic compass numbers (H1/H2/H3).** `compassDelta`, `personalBestAvg`, `handoffStreak`,
+  per-project compass via `devForProject` — all derived from email-hash seeds. Look real, are not.
+  Senior engineers will spot them. Mitigation: tooltip annotation deferred to post-launch.
+- **No real git sync.** Devs' commits + items_closed + target are seeded in `devMockData`. The
+  Python pipeline in `scripts/dashboard/` is the intended source but is not wired to the SPA. Real
+  fix: a backend job runs the existing pipeline weekly, writes JSON, SPA fetches it on init.
+- **No multi-user collaboration.** Each browser is its own world. CEO can't see PM's bug reassigns
+  without sharing a browser session. Real fix: any backend with shared state (Cloudflare Workers +
+  KV is the cheapest path; existing `worker/` folder has partial scaffolding).
+- **Modal a11y.** No focus trap, no return-focus-on-close, no `:focus-visible` rings. Deferred.
+- **Mobile <375px polish.** Header bars overflow on iPhone SE width. Deferred.
+- **`Date.now() + Math.random()` IDs are floats.** Should use `crypto.randomUUID()`. Deferred —
+  no functional bug observed.
+- **Single-file 4,743-line HTML.** Hard to diff in PRs. Splitting into `index.html` + `app.js` +
+  `tailwind.css` + built `tailwind` deferred to next sprint.
+- **No automated tests.** Should add Playwright happy-paths for: login → log off-project → run
+  payout. Deferred.
+
+### Sandbox verification (single-browser)
+
+- Stage 1/2/3 all pass `node --check` on extracted JS (122 KB).
+- HTML structural balance verified: div=885/885, template=204/204, button=104/104, select=54/54,
+  textarea=10/10, table=2/2, svg=3/3, script=3/3.
+- Static server (`python3 -m http.server 8000`) serves devdash.html as 332 KB in ~24 ms.
+- 45 `FIX` markers in source after this pass (was 14 pre-pass; +31 added).
+
+### Files changed
+
+- `devdash.html` — sole product. +391 / -77 lines.
+
 ---
 
 ## 2026-04-24 late-evening — Language-QA batch, viewer role, audit card upgrade, Faizan-handoff Parts 9-11
