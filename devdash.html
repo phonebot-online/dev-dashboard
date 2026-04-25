@@ -202,6 +202,9 @@
   .quote-footer .attr { color: var(--text-fade); font-style: normal; font-size: 10px; margin-top: 4px; display: block; }
   /* Subtle micro-art per view */
   .view-crest { position: absolute; top: 20px; right: 24px; opacity: 0.15; pointer-events: none; }
+  /* SYS FIX — backend-only badge for settings whose effect requires the AWS pipeline */
+  .backend-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(96,165,250,0.12); color: #60a5fa; border: 1px solid rgba(96,165,250,0.3); letter-spacing: 0.06em; text-transform: uppercase; margin-left: 6px; vertical-align: middle; }
+  .backend-note { font-size: 10px; color: var(--text-fade); font-style: italic; margin-top: 6px; }
 </style>
 </head>
 <body x-data="devdash()" x-init="init()" :class="'theme-' + theme + ' density-' + density" x-cloak>
@@ -243,8 +246,9 @@
         <div class="text-xs uppercase tracking-wider text-amber-400 mb-2">First-time setup</div>
         <h2 class="text-xl font-semibold text-white mb-1" x-text="selectedUser?.displayName"></h2>
         <p class="text-gray-400 text-sm mb-6" x-text="selectedUser?.email"></p>
-        <div class="bg-white p-4 rounded-lg inline-block mb-4">
-          <img :src="qrUrl()" width="200" height="200" alt="QR code">
+        <div class="bg-white p-4 rounded-lg inline-block mb-4 relative" x-data="{ qrFailed: false }">
+          <img x-show="!qrFailed" :src="qrUrl()" width="200" height="200" alt="QR code" @error="qrFailed = true">
+          <div x-show="qrFailed" class="w-[200px] h-[200px] flex items-center justify-center text-gray-700 text-xs text-center px-3">QR generator unreachable.<br>Copy this URL into Google Authenticator manually:<br><br><textarea readonly class="w-full text-[10px] !p-1 text-gray-900 bg-gray-100 border border-gray-300" rows="3" x-text="qrUrl().split('data=')[1] ? decodeURIComponent(qrUrl().split('data=')[1]) : ''"></textarea></div>
         </div>
         <div class="text-left text-sm text-gray-300 space-y-2 max-w-sm mx-auto mb-6">
           <div class="flex gap-3"><span class="text-amber-400 font-semibold">1.</span> Open Google Authenticator</div>
@@ -252,6 +256,8 @@
           <div class="flex gap-3"><span class="text-amber-400 font-semibold">3.</span> Point camera at the QR above</div>
           <div class="flex gap-3"><span class="text-amber-400 font-semibold">4.</span> Tap "I've scanned it"</div>
         </div>
+        <!-- HONESTY FIX — TOTP enrolment is decorative in the static SPA build. Any 6-digit code logs you in until the backend lands. -->
+        <div class="text-[10px] mb-4 px-3 py-2 rounded text-left max-w-sm mx-auto" style="background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); color: #60a5fa">⚠ Internal tool — TOTP scan is decorative until the AWS backend lands. Any 6-digit code will let you in. Don't share this URL outside the team.</div>
         <button @click="loginStep='code'" class="primary w-full">I've scanned it</button>
         <button @click="loginStep='pick'; selectedUser=null" class="text-xs text-gray-500 hover:text-gray-300 mt-3">← Back</button>
       </div>
@@ -338,6 +344,19 @@
     </div>
   </div>
 
+  <!-- SYS-2 FIX — weekly audit reminder banner. Shows on the day configured in Settings → System → Full weekly audit day. -->
+  <template x-if="isWeeklyAuditDay() && (currentUser?.role === 'ceo' || currentUser?.role === 'pm')">
+    <div class="px-6 pt-3">
+      <div class="card p-3 flex items-center justify-between gap-3 flex-wrap" style="border-left: 3px solid var(--accent); background: var(--accent-dim);">
+        <div>
+          <div class="text-[10px] uppercase tracking-widest" style="color: var(--accent)">📅 Weekly audit day</div>
+          <div class="text-xs" style="color: var(--text-muted)">Today is <strong x-text="config.system?.weekly_audit_day || 'Sun'"></strong> — time to compose this week's rewards. Settings → Rewards → ✨ Compose this week's rewards.</div>
+        </div>
+        <button @click="activeRoleTab = 'settings'; activeSettingsTab = 'Rewards'" class="secondary text-xs">Open Rewards →</button>
+      </div>
+    </div>
+  </template>
+
   <!-- Role tabs -->
   <div class="px-6 pt-5 border-b border-white/5">
     <div class="flex gap-1 bg-black/30 inline-flex p-1 rounded-lg flex-wrap">
@@ -421,13 +440,13 @@
         </button>
       </div>
 
-      <!-- PAYOUT DUE TODAY banner (fires on payout_day) — Q8 -->
-      <template x-if="new Date().getDate() === (config.rewards.payout_day || 1) && totalPendingPayout() > 0">
+      <!-- PAYOUT DUE TODAY banner — CYCLE-1 FIX: predicate against payout_cycle, not just day-of-month. -->
+      <template x-if="isPayoutDueToday() && totalPendingPayout() > 0">
         <div class="card p-4" style="background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(255,170,0,0.08)); border: 2px solid #f87171; animation: decision-breathe 2s ease-in-out infinite">
           <div class="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <div class="text-[10px] uppercase tracking-widest mb-1" style="color: #f87171">🔔 Payout day — action required</div>
-              <div class="text-sm font-semibold" style="color: var(--text)">Today is the <span x-text="config.rewards.payout_day"></span><span x-text="config.rewards.payout_day === 1 ? 'st' : config.rewards.payout_day === 2 ? 'nd' : config.rewards.payout_day === 3 ? 'rd' : 'th'"></span>. Run this month's payout.</div>
+              <div class="text-sm font-semibold" style="color: var(--text)">Today's the <span x-text="payoutCycleLabel()"></span> payout day. Run it.</div>
               <div class="text-[11px] mt-1" style="color: var(--text-muted)" x-text="formatMoney(totalPendingPayout()) + ' ' + currencySym() + ' pending across ' + Object.keys(pendingByDev()).length + ' dev' + (Object.keys(pendingByDev()).length === 1 ? '' : 's')"></div>
             </div>
             <button @click="openPayoutModal()" class="primary">💰 Run payout now →</button>
@@ -491,7 +510,13 @@
               <div class="flex items-start justify-between mb-3">
                 <div class="flex-1 min-w-0">
                   <div class="font-semibold text-sm mb-1" style="color: var(--text)" x-text="p.name"></div>
-                  <div class="text-[11px] text-gray-500 mb-2">Owner: <span style="color: var(--accent)" x-text="ownerName(p)"></span></div>
+                  <!-- BUG-CONTRIB-1 FIX — show owner + contributors on project cards so Settings → Projects assignments are visible without opening the modal -->
+                  <div class="text-[11px] mb-2 flex items-center gap-1.5 flex-wrap">
+                    <span class="text-gray-500">Owner:</span><span style="color: var(--accent)" x-text="ownerName(p)"></span>
+                    <template x-if="(p.contributor_emails || []).length">
+                      <span class="flex items-center gap-1 flex-wrap"><span class="text-gray-500">· Contributors:</span><template x-for="c in contributorsOf(p)" :key="c.email"><span class="px-1.5 py-0.5 rounded text-[10px]" style="background: var(--card-hover); color: var(--text-muted); border: 1px solid var(--border)" x-text="c.displayName"></span></template></span>
+                    </template>
+                  </div>
                   <div class="text-xs" style="color: var(--text-muted)" x-text="p.summary"></div>
                 </div>
                 <div class="dot mt-1 ml-2 flex-shrink-0" :class="'dot-' + p.traffic_light"></div>
@@ -626,7 +651,13 @@
               <div class="flex items-start justify-between mb-3">
                 <div class="flex-1 min-w-0">
                   <div class="font-semibold text-sm mb-1" style="color: var(--text)" x-text="p.name"></div>
-                  <div class="text-[11px] text-gray-500 mb-2">Owner: <span style="color: var(--accent)" x-text="ownerName(p)"></span></div>
+                  <!-- BUG-CONTRIB-1 FIX — show owner + contributors on project cards so Settings → Projects assignments are visible without opening the modal -->
+                  <div class="text-[11px] mb-2 flex items-center gap-1.5 flex-wrap">
+                    <span class="text-gray-500">Owner:</span><span style="color: var(--accent)" x-text="ownerName(p)"></span>
+                    <template x-if="(p.contributor_emails || []).length">
+                      <span class="flex items-center gap-1 flex-wrap"><span class="text-gray-500">· Contributors:</span><template x-for="c in contributorsOf(p)" :key="c.email"><span class="px-1.5 py-0.5 rounded text-[10px]" style="background: var(--card-hover); color: var(--text-muted); border: 1px solid var(--border)" x-text="c.displayName"></span></template></span>
+                    </template>
+                  </div>
                   <div class="text-xs" style="color: var(--text-muted)" x-text="p.summary"></div>
                 </div>
                 <div class="dot mt-1 ml-2 flex-shrink-0" :class="'dot-' + p.traffic_light"></div>
@@ -811,14 +842,21 @@
             <button @click="addRegression()" class="text-[10px] px-2 py-0.5 rounded" style="background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent)" title="Log a regression candidate">+ Log regression</button>
           </div>
           <div class="space-y-1.5">
-            <template x-for="(r, rIdx) in regressionCandidates" :key="r.id">
+            <template x-for="(r, rIdx) in filteredRegressionCandidates()" :key="r.id">
               <div class="text-xs py-1" style="border-bottom: 1px solid var(--divider)">
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <input :value="r.current" @change="r.current = $event.target.value; save('regressionCandidates')" :data-focus-regression="rIdx === 0 ? '1' : null" class="!p-0 !bg-transparent !border-0 !text-xs w-full" placeholder="What's coming back? e.g. Checkout double-click orders" style="color: var(--text)">
-                    <div class="text-[10px] mt-0.5" style="color: var(--text-fade)">
-                      Similar to <input :value="r.past" @change="r.past = $event.target.value; save('regressionCandidates')" class="!p-0 !bg-transparent !border-0 !text-[10px] inline w-auto min-w-[12ch]" placeholder="e.g. R0-04 idempotency" style="color: var(--accent)">
-                      · <span x-text="r.past_week + 'w ago'"></span>
+                    <div class="text-[10px] mt-0.5 flex items-center gap-1.5 flex-wrap" style="color: var(--text-fade)">
+                      <span>Similar to</span>
+                      <input :value="r.past" @change="r.past = $event.target.value; save('regressionCandidates')" class="!p-0 !bg-transparent !border-0 !text-[10px] inline w-auto min-w-[12ch]" placeholder="e.g. R0-04 idempotency" style="color: var(--accent)">
+                      <span>·</span>
+                      <select :value="r.project || ''" @change="r.project = $event.target.value; save('regressionCandidates')" class="!p-0 !bg-transparent !border-0 !text-[10px] !w-auto" style="color: var(--accent)">
+                        <option value="">(no project)</option>
+                        <template x-for="p in config.projects" :key="p.id"><option :value="p.name" x-text="p.name"></option></template>
+                      </select>
+                      <span>·</span>
+                      <span x-text="r.past_week + 'w ago'"></span>
                     </div>
                   </div>
                   <div class="flex gap-1 flex-shrink-0">
@@ -945,6 +983,13 @@
       </template>
       <template x-if="devViewTarget()">
         <div class="space-y-6">
+          <!-- H4 FIX — empty-data banner so newly added or unseeded devs see a clear "no data yet" message instead of all-zero panels that look broken. -->
+          <template x-if="isEmptyDev(devViewTarget())">
+            <div class="card p-4" style="border-left: 3px solid var(--accent); background: var(--accent-dim);">
+              <div class="text-sm font-semibold mb-1" style="color: var(--accent)">No activity data yet for <span x-text="devViewTarget().displayName"></span></div>
+              <div class="text-xs" style="color: var(--text-muted)">Compass scores, commits, and queue will populate when the weekly audit runs (Sunday night) or when this dev logs activity (clock-in, off-project, handoff notes). The all-zero values below are placeholders.</div>
+            </div>
+          </template>
           <!-- Header — name, scope badges, inline strength chips, handoff callout -->
           <div class="card panel-dev p-6 flex items-center gap-6 flex-wrap">
             <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-semibold bg-blue-500/20 text-blue-400 flex-shrink-0" x-text="devViewTarget().displayName[0]"></div>
@@ -977,9 +1022,17 @@
               <div>
                 <div class="text-xs uppercase tracking-wider text-gray-400">Your compass — four directions</div>
                 <div class="text-[11px] text-gray-500 mt-0.5">Shape tells the story of this week's strengths. Handoff discipline applied as multiplier.</div>
+                <!-- VIS-1 FIX — surface visibility-mode reason when something is hidden, so the dev knows it's a setting, not a bug. -->
+                <template x-if="compassVisibilityNote(devViewTarget())">
+                  <div class="text-[11px] mt-1 italic" style="color: var(--accent)" x-text="compassVisibilityNote(devViewTarget())"></div>
+                </template>
               </div>
             </div>
-            <div class="grid md:grid-cols-5 gap-6 items-center">
+            <!-- VIS-1 FIX — opaque mode hides the whole compass body, leaving only the heading + the visibility note above. -->
+            <template x-if="!compassShapeVisible(devViewTarget())">
+              <div class="text-center py-12 text-sm" style="color: var(--text-fade)">Compass hidden by your role's visibility setting.</div>
+            </template>
+            <div x-show="compassShapeVisible(devViewTarget())" class="grid md:grid-cols-5 gap-6 items-center">
               <!-- Compass SVG -->
               <div class="md:col-span-2 flex justify-center">
                 <svg viewBox="-160 -145 320 300" overflow="visible" class="w-full max-w-sm">
@@ -1002,7 +1055,8 @@
                   <circle :cx="-100 * devViewTarget().compass.drive / 100" cy="0" r="4" fill="#ffaa00" stroke="var(--bg-soft)" stroke-width="1.5"/>
                   <!-- Handoff multiplier in the centre — the multiplier sits at the compass heart because it scales all 4 directions -->
                   <circle cx="0" cy="0" r="28" fill="var(--bg-soft)" stroke="var(--border-strong)" stroke-width="1"/>
-                  <text x="0" y="-4" text-anchor="middle" :fill="devViewTarget().handoff_mult >= 0.95 ? '#4ade80' : devViewTarget().handoff_mult >= 0.9 ? 'var(--accent)' : '#f87171'" style="font-size: 18px; font-weight: 700; font-family: inherit;" x-text="Math.round(devViewTarget().handoff_mult * 100) + '%'"></text>
+                  <!-- VIS-1 FIX — central handoff number hidden when numbers visibility is off. -->
+                  <text x="0" y="-4" text-anchor="middle" :fill="devViewTarget().handoff_mult >= 0.95 ? '#4ade80' : devViewTarget().handoff_mult >= 0.9 ? 'var(--accent)' : '#f87171'" style="font-size: 18px; font-weight: 700; font-family: inherit;" x-text="compassNumbersVisible(devViewTarget()) ? (Math.round(devViewTarget().handoff_mult * 100) + '%') : '—'"></text>
                   <text x="0" y="10" text-anchor="middle" style="font-size: 7px; fill: var(--text-fade); font-weight: 600; letter-spacing: 0.1em;">HANDOFF ×</text>
                   <!-- Labels N / E / S / W -->
                   <text x="0" y="-115" class="compass-label" text-anchor="middle">N · VELOCITY</text>
@@ -1033,17 +1087,26 @@
                         <!-- Threshold marker from config (not hardcoded 75) -->
                         <div class="absolute top-0 bottom-0 border-l-2 border-dashed" :style="'left: ' + (config.scoring.directions[d]?.threshold || 75) + '%; border-color: var(--accent)'" :title="'Reward threshold: ' + (config.scoring.directions[d]?.threshold || 75)"></div>
                       </div>
+                      <!-- VIS-1 FIX — score number + delta hidden when numbers visibility is off; coaching line also hidden because it references the numbers. -->
                       <div class="w-20 text-right flex-shrink-0 flex items-baseline justify-end gap-1">
-                        <span class="text-base font-semibold tabular-nums" style="color: var(--text)" x-text="devViewTarget().compass[d]"></span>
-                        <span class="text-[10px]" style="color: var(--text-fade)">/100</span>
+                        <template x-if="compassNumbersVisible(devViewTarget())">
+                          <span><span class="text-base font-semibold tabular-nums" style="color: var(--text)" x-text="devViewTarget().compass[d]"></span><span class="text-[10px]" style="color: var(--text-fade)"> /100</span></span>
+                        </template>
+                        <template x-if="!compassNumbersVisible(devViewTarget())">
+                          <span class="text-base font-semibold" style="color: var(--text-fade)">—</span>
+                        </template>
                       </div>
                       <!-- Week-over-week delta -->
                       <div class="w-14 text-right flex-shrink-0">
-                        <span class="text-[11px] tabular-nums" :style="compassDelta(devViewTarget(), d) > 0 ? 'color: #4ade80' : compassDelta(devViewTarget(), d) < 0 ? 'color: #f87171' : 'color: var(--text-fade)'" x-text="(compassDelta(devViewTarget(), d) > 0 ? '▲ +' : compassDelta(devViewTarget(), d) < 0 ? '▼ ' : '— ') + Math.abs(compassDelta(devViewTarget(), d))"></span>
+                        <template x-if="compassNumbersVisible(devViewTarget())">
+                          <span class="text-[11px] tabular-nums" :style="compassDelta(devViewTarget(), d) > 0 ? 'color: #4ade80' : compassDelta(devViewTarget(), d) < 0 ? 'color: #f87171' : 'color: var(--text-fade)'" x-text="(compassDelta(devViewTarget(), d) > 0 ? '▲ +' : compassDelta(devViewTarget(), d) < 0 ? '▼ ' : '— ') + Math.abs(compassDelta(devViewTarget(), d))"></span>
+                        </template>
                       </div>
                     </div>
-                    <!-- Coaching line per direction -->
-                    <div class="text-[11px] ml-[7.5rem]" style="color: var(--text-muted)" x-html="compassCoaching(devViewTarget(), d)"></div>
+                    <!-- Coaching line per direction (hidden when numbers are hidden — it references gaps that depend on the numbers). -->
+                    <template x-if="compassNumbersVisible(devViewTarget())">
+                      <div class="text-[11px] ml-[7.5rem]" style="color: var(--text-muted)" x-html="compassCoaching(devViewTarget(), d)"></div>
+                    </template>
                   </div>
                 </template>
                 <!-- Handoff multiplier with explanation -->
@@ -1056,11 +1119,13 @@
                       </div>
                     </div>
                     <div class="w-20 text-right flex-shrink-0 flex items-baseline justify-end gap-1">
-                      <span class="text-base font-semibold tabular-nums" style="color: var(--text)" x-text="Math.round(devViewTarget().handoff_mult * 100) + '%'"></span>
+                      <span class="text-base font-semibold tabular-nums" style="color: var(--text)" x-text="compassNumbersVisible(devViewTarget()) ? (Math.round(devViewTarget().handoff_mult * 100) + '%') : '—'"></span>
                     </div>
                     <div class="w-14"></div>
                   </div>
-                  <div class="text-[11px] ml-[7.5rem]" style="color: var(--text-muted)" x-html="handoffCoaching(devViewTarget())"></div>
+                  <template x-if="compassNumbersVisible(devViewTarget())">
+                    <div class="text-[11px] ml-[7.5rem]" style="color: var(--text-muted)" x-html="handoffCoaching(devViewTarget())"></div>
+                  </template>
                 </div>
               </div>
             </div>
@@ -1707,7 +1772,7 @@
           <div class="card p-5">
             <div class="grid md:grid-cols-2 gap-3">
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Name</label><input x-model="p.name"></div>
-              <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Owner</label><select x-model="p.owner_email"><option value="">(unowned)</option><template x-for="u in devs" :key="u.email"><option :value="u.email" x-text="u.displayName"></option></template></select></div>
+              <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Owner</label><select :value="p.owner_email" @change="setProjectOwner(p, $event.target.value)"><option value="">(unowned)</option><template x-for="u in devs" :key="u.email"><option :value="u.email" x-text="u.displayName"></option></template></select></div>
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Kickoff</label><input x-model="p.kickoff" type="date"></div>
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Deadline</label><input x-model="p.deadline" type="date"></div>
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Status</label><select x-model="p.status"><option>active</option><option>paused</option><option>archived</option></select></div>
@@ -1743,8 +1808,9 @@
         <template x-if="pendingQrEmail && config.users.find(u => u.email === pendingQrEmail)">
           <div class="card p-5 fade-in" style="border: 1px solid var(--accent); background: var(--accent-dim);">
             <div class="flex items-start gap-5 flex-wrap">
-              <div class="bg-white p-3 rounded-lg flex-shrink-0">
-                <img :src="qrUrlFor(pendingQrEmail)" width="180" height="180" alt="QR code for new user">
+              <div class="bg-white p-3 rounded-lg flex-shrink-0" x-data="{ qrFailed: false }">
+                <img x-show="!qrFailed" :src="qrUrlFor(pendingQrEmail)" width="180" height="180" alt="QR code for new user" @error="qrFailed = true">
+                <div x-show="qrFailed" class="w-[180px] h-[180px] flex items-center justify-center text-gray-700 text-[11px] text-center px-2">QR generator unreachable. Use the "Copy QR link" button below and paste into Google Authenticator's manual entry.</div>
               </div>
               <div class="flex-1 min-w-0">
                 <div class="text-[10px] uppercase tracking-widest mb-1" style="color: var(--accent)">New user registration</div>
@@ -1767,7 +1833,7 @@
           <table class="w-full text-sm">
             <thead>
               <tr class="text-[10px] uppercase tracking-wider text-gray-500 border-b" style="border-color: var(--border)">
-                <th class="text-left p-3">Name</th><th class="text-left p-3">Email</th><th class="text-left p-3">Role</th><th class="text-left p-3">Hours/wk</th><th class="text-left p-3">Status</th><th class="text-left p-3">Absence</th><th></th>
+                <th class="text-left p-3">Name</th><th class="text-left p-3">Email</th><th class="text-left p-3">Role</th><th class="text-left p-3">Hours/wk</th><th class="text-left p-3">Status</th><th class="text-left p-3">Absence</th><th class="text-left p-3" title="Probation end date — devs in probation skip reward composition until this date passes">Probation ends</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -1792,6 +1858,9 @@
                         <input type="date" :value="u.absence.until || ''" @input="u.absence.until = $event.target.value" class="!p-1 !text-xs w-32" title="Expected return">
                       </template>
                     </div>
+                  </td>
+                  <td class="p-3">
+                    <input type="date" :value="u.probation_end || ''" @input="u.probation_end = $event.target.value || null; saveConfig()" class="!p-1 !text-xs w-32" title="Leave blank for no probation. Devs with a future probation_end skip reward composition until that date.">
                   </td>
                   <td class="p-3 text-right whitespace-nowrap">
                     <button @click="pendingQrEmail = u.email" class="secondary text-xs mr-1" title="Show QR code for this user">QR</button>
@@ -2019,14 +2088,14 @@
         <div class="card p-5">
           <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Sync cadence (global default)</div>
           <div class="grid md:grid-cols-3 gap-3">
-            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Daily lightweight pull</label><select x-model="config.system.daily_pull"><option value="on">on</option><option value="off">off</option></select></div>
-            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Full weekly audit day</label><select x-model="config.system.weekly_audit_day"><option>Sun</option><option>Mon</option><option>Fri</option></select></div>
-            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Timezone</label><input x-model="config.system.timezone"></div>
+            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Daily lightweight pull <span class="backend-badge">server</span></label><select x-model="config.system.daily_pull"><option value="on">on</option><option value="off">off</option></select><div class="backend-note">Saved here, applied by the AWS daily Lambda when wired.</div></div>
+            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Full weekly audit day</label><select x-model="config.system.weekly_audit_day"><option>Sun</option><option>Mon</option><option>Fri</option></select><div class="backend-note">Drives the in-dashboard reminder banner (see top of every view on the chosen day).</div></div>
+            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Timezone</label><input x-model="config.system.timezone"><div class="backend-note">Live (drives the live clock and date math).</div></div>
           </div>
         </div>
         <div class="card p-5">
-          <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Context window</div>
-          <div class="text-[11px] text-gray-500 mb-3">Active files loaded fully. Older files get summarized / archived to control context burn.</div>
+          <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Context window <span class="backend-badge">server</span></div>
+          <div class="text-[11px] text-gray-500 mb-3">Saved here, consumed by the weekly-audit pipeline when wired. Active files loaded fully. Older files get summarized / archived to control context burn.</div>
           <div class="grid md:grid-cols-3 gap-3">
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Active (days)</label><input x-model.number="config.system.context.active_days" type="number"></div>
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Compressed (days)</label><input x-model.number="config.system.context.compressed_days" type="number"></div>
@@ -2034,8 +2103,8 @@
           </div>
         </div>
         <div class="card p-5">
-          <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Nightly state snapshots (time-machine)</div>
-          <div class="text-[11px] text-gray-500 mb-3">JSON state per view per night — lightweight, diffable, replayable. Way smaller than PNG screenshots.</div>
+          <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Nightly state snapshots (time-machine) <span class="backend-badge">server</span></div>
+          <div class="text-[11px] text-gray-500 mb-3">Saved here, snapshots written by the AWS nightly Lambda when wired. JSON state per view per night — lightweight, diffable, replayable. Way smaller than PNG screenshots.</div>
           <div class="grid md:grid-cols-3 gap-3">
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Enabled</label><select x-model="config.system.snapshots.enabled"><option value="yes">yes</option><option value="no">no</option></select></div>
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Retention (days)</label><input x-model.number="config.system.snapshots.retention_days" type="number"></div>
@@ -2050,8 +2119,8 @@
           </div>
         </div>
         <div class="card p-5">
-          <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">AWS infrastructure</div>
-          <div class="text-[11px] text-gray-500 mb-3">Keep lean: S3 static hosting + Lambda jobs + DynamoDB + SES for email digests.</div>
+          <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">AWS infrastructure <span class="backend-badge">server</span></div>
+          <div class="text-[11px] text-gray-500 mb-3">Saved here, consumed by Lambda + SES when wired. Keep lean: S3 static hosting + Lambda jobs + DynamoDB + SES for email digests.</div>
           <div class="grid md:grid-cols-2 gap-3">
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">AWS region</label><input x-model="config.system.aws.region"></div>
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Dashboard URL</label><input x-model="config.system.aws.dashboard_url"></div>
@@ -2063,6 +2132,12 @@
           <div class="text-xs uppercase tracking-wider mb-2" style="color: #f87171">Danger zone</div>
           <div class="text-[11px] mb-3" style="color: var(--text-muted)">Resets projects, users, scoring, rewards, system config to built-in defaults. Handoff notes, bugs, audits are kept. Use this if stale saved data is masking new defaults.</div>
           <button @click="resetConfigToDefaults()" class="danger">Reset all settings to defaults</button>
+        </div>
+        <!-- HONESTY FIX — full data reset for go-live (clears every devdash_* localStorage key, including bugs/audits/rewards/etc). -->
+        <div class="card p-5" style="border-color: rgba(248,113,113,0.5)">
+          <div class="text-xs uppercase tracking-wider mb-2" style="color: #f87171">Go-live wipe</div>
+          <div class="text-[11px] mb-3" style="color: var(--text-muted)">Wipes <strong>every</strong> dashboard storage key in this browser: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, off-project mock data, sessions, theme, density, provisioning flags. Use ONCE before going live to clear demo seeds. Two confirms required.</div>
+          <button @click="resetAllDashboardData()" class="danger">Wipe all dashboard data (go-live)</button>
         </div>
         <div class="text-[11px] text-center py-2" style="color: var(--text-fade)">✓ System changes save automatically</div>
       </div>
@@ -2414,8 +2489,11 @@
             <!-- Readiness checklist (ticking always works; +/edit only in edit mode) -->
             <div class="card p-4">
               <div class="flex items-center justify-between mb-3">
-                <div class="text-[10px] uppercase tracking-wider" style="color: var(--text-muted)">Launch-readiness checklist</div>
-                <div class="flex items-center gap-3">
+                <div class="flex-1 min-w-0">
+                  <div class="text-[10px] uppercase tracking-wider" style="color: var(--text-muted)">Launch-readiness checklist <span class="backend-badge">manual</span></div>
+                  <div class="text-[10px] mt-1" style="color: var(--text-fade)">Manual-by-design — most readiness items (e.g. "QA sign-off", "rollback tested") are human judgments. CI-detectable items (deploy succeeded, all tests green) will auto-tick once the AWS pipeline is wired in a future sprint.</div>
+                </div>
+                <div class="flex items-center gap-3 flex-shrink-0">
                   <div class="text-[10px]" style="color: var(--text-fade)">Tick as you go — auto-saves</div>
                   <template x-if="projectDetailEdit"><button @click="addReadinessItem(projectDetail())" class="secondary text-xs">+ Add item</button></template>
                 </div>
@@ -2942,7 +3020,47 @@ function devdash() {
         ],
       },
     },
-    emptyDev() { return { compass: { velocity: 0, craft: 0, reliability: 0, drive: 0 }, handoff_mult: 0.85, traffic_light: 'yellow', items_closed: 0, target: 1, summary: 'No activity this week.', off_project_hours: 0, off_project_note: '', commits: [], queue: [] }; },
+    // H4 FIX — flag empty devs so the dev view can show a clear "no data yet" banner instead of all-zero panels that look broken.
+    emptyDev() { return { compass: { velocity: 0, craft: 0, reliability: 0, drive: 0 }, handoff_mult: 0.85, traffic_light: 'yellow', items_closed: 0, target: 1, summary: 'No activity this week.', off_project_hours: 0, off_project_note: '', commits: [], queue: [], _isEmpty: true }; },
+    isEmptyDev(dev) { return !!(dev && dev._isEmpty); },
+
+    // VIS-1/VIS-2 FIX — wire scoring.visibility.self + .peer to actual compass display.
+    // Self values: 'live' | 'weekly' | 'shape_only' | 'opaque'
+    // Peer values: 'shapes' (= shape + numbers) | 'shapes_only' | 'none'
+    isViewingSelf(dev) { return !!(dev && this.currentUser && dev.email === this.currentUser.email); },
+    // Visibility rules apply only to the dev role (self vs peer). CEO, PM, QA, QA Auditor see everything.
+    _visibilityRoleApplies() { return this.currentUser?.role === 'dev'; },
+    compassNumbersVisible(dev) {
+      if (!dev) return false;
+      if (!this._visibilityRoleApplies()) return true;
+      if (this.isViewingSelf(dev)) {
+        const mode = this.config.scoring.visibility?.self || 'live';
+        return mode === 'live' || mode === 'weekly';
+      }
+      const mode = this.config.scoring.visibility?.peer || 'shapes';
+      return mode === 'shapes';
+    },
+    compassShapeVisible(dev) {
+      if (!dev) return false;
+      if (!this._visibilityRoleApplies()) return true;
+      if (this.isViewingSelf(dev)) {
+        return (this.config.scoring.visibility?.self || 'live') !== 'opaque';
+      }
+      return (this.config.scoring.visibility?.peer || 'shapes') !== 'none';
+    },
+    compassVisibilityNote(dev) {
+      if (!dev || !this._visibilityRoleApplies()) return '';
+      if (this.isViewingSelf(dev)) {
+        const mode = this.config.scoring.visibility?.self || 'live';
+        if (mode === 'shape_only') return 'Numbers hidden by Settings → Scoring → "Dev sees own compass = Shape only".';
+        if (mode === 'opaque') return 'Compass hidden by Settings → Scoring → "Dev sees own compass = Opaque".';
+        return '';
+      }
+      const mode = this.config.scoring.visibility?.peer || 'shapes';
+      if (mode === 'shapes_only') return 'Peer numbers hidden by Settings → Scoring → "Dev sees peer compasses = Shapes only".';
+      if (mode === 'none') return 'Peer compasses hidden by Settings → Scoring → "Dev sees peer compasses = Nothing".';
+      return '';
+    },
 
     bugs: [
       { id: 1, summary: 'Checkout payment button allows double-click → duplicate orders', severity: 'HIGH', project: 'Phonebot 2.0', status: 'open', days_open: 2, assigned_to: 'Faizan' },
@@ -2973,8 +3091,8 @@ function devdash() {
       { id: 3, pr_id: 23, repo: 'mobile-app', days_stuck: 5, waiting_on: 'Usama' },
     ],
     regressionCandidates: [
-      { id: 1, current: 'Checkout double-click duplicate orders', past: 'R0-04 checkout idempotency', past_week: 8 },
-      { id: 2, current: 'PDP stock banner overlap', past: 'PPR-11 stock badge layout', past_week: 3 },
+      { id: 1, current: 'Checkout double-click duplicate orders', past: 'R0-04 checkout idempotency', past_week: 8, project: 'Phonebot 2.0', status: 'open' },
+      { id: 2, current: 'PDP stock banner overlap', past: 'PPR-11 stock badge layout', past_week: 3, project: 'Product Page Revamp', status: 'open' },
     ],
     auditLog: [
       { id: 1, when: '2026-04-24 09:12', who: 'Fahad', section: 'Scoring', change: 'Changed Drive threshold: 70 → 75' },
@@ -3006,12 +3124,18 @@ function devdash() {
       }
       const defaultConfig = JSON.parse(JSON.stringify(this.config));
       this.corruptStorageKeys = [];
-      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog'].forEach(key => {
+      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','devMockData'].forEach(key => {
         const s = localStorage.getItem('devdash_' + key);
         // L11 FIX — don't silently swallow corrupt keys; log + surface to user so months of data don't vanish unnoticed
         if (s) {
           try {
-            this[key] = JSON.parse(s);
+            // C2/H4 FIX — merge devMockData over the in-memory seed so new seed devs appear after upgrades; replace other keys.
+            if (key === 'devMockData') {
+              const persisted = JSON.parse(s);
+              this.devMockData = { ...this.devMockData, ...persisted };
+            } else {
+              this[key] = JSON.parse(s);
+            }
           } catch (e) {
             console.warn('Corrupt localStorage key devdash_' + key + ' — falling back to defaults', e);
             this.corruptStorageKeys.push(key);
@@ -3093,6 +3217,18 @@ function devdash() {
       for (const b of (this.bugs || [])) {
         if (b.disputed === undefined) b.disputed = false;
       }
+      // H5 FIX — backfill regression project tag on records created before the field existed.
+      for (const r of (this.regressionCandidates || [])) {
+        if (r.project === undefined) r.project = '';
+        if (r.status === undefined) r.status = 'open';
+      }
+    },
+    // HONESTY FIX — full data wipe for go-live. Clears every devdash_* key in this browser.
+    resetAllDashboardData() {
+      if (!confirm('Wipe ALL dashboard data in this browser?\n\nThis will delete: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, off-project mock data, your session, theme, density, and TOTP provisioning flags.\n\nUse this once before going live to clear demo seeds. Irreversible.\n\nContinue?')) return;
+      if (!confirm('Second confirm — really wipe ALL devdash_* localStorage keys?')) return;
+      Object.keys(localStorage).filter(k => k.startsWith('devdash_')).forEach(k => localStorage.removeItem(k));
+      location.reload();
     },
     // I07 FIX — accurate confirm + clear session + provisioned flags so re-added users work
     resetConfigToDefaults() {
@@ -3131,6 +3267,14 @@ function devdash() {
       }
     },
     storageFull: false, _storageWarnedOnce: false, corruptStorageKeys: [],
+    // M1 FIX — single-flight guard for submit handlers to block double-submits.
+    _inFlight: {},
+    _guard(name) {
+      if (this._inFlight[name]) return false;
+      this._inFlight[name] = true;
+      setTimeout(() => { this._inFlight[name] = false; }, 1500);
+      return true;
+    },
     saveConfig() {
       localStorage.setItem('devdash_config', JSON.stringify(this.config));
       this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: this.activeSettingsTab, change: 'Saved ' + this.activeSettingsTab.toLowerCase() + ' section' });
@@ -3233,50 +3377,146 @@ function devdash() {
     // ────────────────────────────────────────────────────────────
     // REWARD EVENT LIFECYCLE
     // ────────────────────────────────────────────────────────────
-    // Build a weekly reward event for a dev based on their compass. Called once per week
-    // per dev by the audit. Creates 0-5 events (4 direction + 1 True North + growth is monthly).
-    // Absence rule: pro-rated by days worked / 5.
-    composeWeeklyRewards(dev, weekStart, daysWorked = 5) {
+    // Build weekly reward events for a dev. Honours every relevant Settings → Rewards field.
+    // Now produces: direction unlocks, True North, growth bonus, owner bonus.
+    // Absence + probation + growth-rule + owner-bonus settings all wired.
+    // ABS-1 FIX: count actual weekdays clocked in via clockEntries; fall back to 5.
+    daysWorkedThisWeek(email) {
+      if (!email) return 5;
+      let mondayOffset = (new Date().getDay() === 0) ? -6 : 1 - new Date().getDay();
+      const today = new Date();
+      const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + mondayOffset);
+      let count = 0;
+      let anyClock = false;
+      for (let i = 0; i < 5; i++) {
+        const d = new Date(monday); d.setDate(monday.getDate() + i);
+        const k = d.toISOString().slice(0, 10) + '-' + email;
+        if (this.clockEntries[k]) { anyClock = true; if (this.clockEntries[k].start) count++; }
+      }
+      // If the user never clocks in (some teams don't), assume the standard 5.
+      return anyClock ? count : 5;
+    },
+    composeWeeklyRewards(dev, weekStart, daysWorked = null) {
       if (!dev) return [];
       const events = [];
-      const factor = Math.max(0, Math.min(1, daysWorked / 5)); // pro-rated
       const cur = this.config.rewards.currency || 'PKR';
       const t = this.config.scoring.directions;
       const perDir = this.config.rewards.per_direction_aud;
-      // Skip if in probation
+      // PROB-2 FIX — probation skip path actually fires now (UI lets you set probation_end).
       const u = this.config.users.find(x => x.email === dev.email);
       if (u && u.probation_end) {
         if (new Date(u.probation_end) > new Date(weekStart)) return [];
       }
+      // ABS-1 FIX — honour absence_rule. 'full' ignores absence; 'pro_rated' uses ratio; 'forfeit' returns nothing if any day missing.
+      const dw = daysWorked != null ? daysWorked : this.daysWorkedThisWeek(dev.email);
+      const rule = this.config.rewards.absence_rule || 'pro_rated';
+      let factor;
+      if (rule === 'full') factor = 1;
+      else if (rule === 'forfeit') {
+        if (dw < 5) return [];
+        factor = 1;
+      } else {
+        factor = Math.max(0, Math.min(1, dw / 5));
+      }
+      const factorNote = (factor < 1) ? `Pro-rated × ${dw}/5 (absence_rule=${rule})` : '';
+      let nextId = Date.now();
+      const newId = () => ++nextId;
       // Direction unlocks
       for (const d of ['velocity', 'craft', 'reliability', 'drive']) {
         if ((dev.compass?.[d] || 0) >= (t[d]?.threshold || 75)) {
-          events.push({
-            id: Date.now() + Math.random(),
-            dev_email: dev.email,
-            week_start: weekStart,
-            type: 'direction',
-            direction: d,
-            amount: Math.round(perDir * factor),
-            currency: cur,
-            status: 'pending',
-            note: daysWorked < 5 ? `Pro-rated × ${daysWorked}/5 (absence)` : '',
-          });
+          events.push({ id: newId(), dev_email: dev.email, week_start: weekStart, type: 'direction', direction: d, amount: Math.round(perDir * factor), currency: cur, status: 'pending', note: factorNote });
         }
       }
       // True North bonus
       if (this.strongDirections(dev).length === 4) {
-        events.push({
-          id: Date.now() + Math.random() + 1,
-          dev_email: dev.email,
-          week_start: weekStart,
-          type: 'true_north',
-          direction: null,
-          amount: Math.round(this.config.rewards.true_north_aud * factor),
-          currency: cur,
-          status: 'pending',
-          note: daysWorked < 5 ? `Pro-rated × ${daysWorked}/5 (absence)` : '',
-        });
+        events.push({ id: newId(), dev_email: dev.email, week_start: weekStart, type: 'true_north', direction: null, amount: Math.round((this.config.rewards.true_north_aud || 0) * factor), currency: cur, status: 'pending', note: factorNote });
+      }
+      // GROWTH-1 FIX — growth events when a direction improved by ≥ growth_min_delta vs last week.
+      // 'independent' = pays on improvement regardless of new score; 'threshold_only' = also requires new score ≥ threshold.
+      const minDelta = this.config.rewards.growth_min_delta || 10;
+      const growthAmt = this.config.rewards.growth_aud || 0;
+      const growthRule = this.config.rewards.growth_bonus_rule || 'independent';
+      if (growthAmt > 0) {
+        for (const d of ['velocity', 'craft', 'reliability', 'drive']) {
+          const delta = this.compassDelta(dev, d);
+          if (delta < minDelta) continue;
+          if (growthRule === 'threshold_only' && (dev.compass?.[d] || 0) < (t[d]?.threshold || 75)) continue;
+          events.push({ id: newId(), dev_email: dev.email, week_start: weekStart, type: 'growth', direction: d, amount: Math.round(growthAmt * factor), currency: cur, status: 'pending', note: `+${delta} pts on ${d} (rule=${growthRule})` + (factorNote ? ' · ' + factorNote : '') });
+        }
+      }
+      // OWNER-1 FIX — owner bonus when a project this dev owns shipped green within grace window.
+      // Triggers once per project per week if forecast_launch ≤ deadline + grace_days AND traffic_light === 'green'.
+      const ownerPct = this.config.rewards.owner_bonus_pct || 0;
+      const grace = this.config.rewards.owner_bonus_grace_days || 0;
+      if (ownerPct > 0) {
+        const ownedProjects = (this.config.projects || []).filter(p => p.owner_email === dev.email && p.traffic_light === 'green' && p.deadline && p.deadline !== '2099-12-31' && p.forecast_launch && p.forecast_launch !== 'Ongoing');
+        for (const p of ownedProjects) {
+          const forecast = new Date(p.forecast_launch);
+          const deadline = new Date(p.deadline);
+          if (isNaN(forecast.getTime()) || isNaN(deadline.getTime())) continue;
+          const lateDays = Math.round((forecast - deadline) / (1000 * 60 * 60 * 24));
+          if (lateDays > grace) continue;
+          // Only fire once per project per dev (idempotent against existing pending/paid owner events for this project).
+          const already = this.rewardEvents.some(e => e.dev_email === dev.email && e.type === 'owner_bonus' && e.project_id === p.id);
+          if (already) continue;
+          const baseAmt = this.config.rewards.true_north_aud || 0;
+          const amount = Math.round(baseAmt * ownerPct / 100 * factor);
+          events.push({ id: newId(), dev_email: dev.email, week_start: weekStart, type: 'owner_bonus', direction: null, project_id: p.id, project_name: p.name, amount, currency: cur, status: 'pending', note: `Project "${p.name}" green at ${lateDays}d ${lateDays <= 0 ? 'early' : 'late (within grace ' + grace + 'd)'} — ${ownerPct}% of True North` + (factorNote ? ' · ' + factorNote : '') });
+        }
+      }
+      return events;
+    },
+    // POOL-1 FIX — team pool distribution. Fires once per crossed threshold, honours team_pool_split.
+    composeTeamPoolEvents(weekStart) {
+      const events = [];
+      const cur = this.config.rewards.currency || 'PKR';
+      const pool = this.config.rewards.team_pool_aud || 0;
+      if (pool <= 0) return events;
+      const tpp = this.teamPoolProgress();
+      const thresholds = (this.config.rewards.unlock_thresholds || [25, 50, 75, 100]).slice().sort((a, b) => a - b);
+      const reachedThresholds = thresholds.filter(t => t <= tpp.avg);
+      // Find unfired thresholds (no existing team_pool event with matching threshold)
+      const firedSet = new Set(this.rewardEvents.filter(e => e.type === 'team_pool').map(e => e.threshold));
+      const newThresholds = reachedThresholds.filter(t => !firedSet.has(t));
+      if (!newThresholds.length) return events;
+      const split = this.config.rewards.team_pool_split || 'owner_decides';
+      const activeDevs = (this.config.users || []).filter(u => u.role === 'dev' && u.status === 'active');
+      let nextId = Date.now() + 100000;
+      const newId = () => ++nextId;
+      for (const threshold of newThresholds) {
+        // Pool slice per threshold = pool / number of thresholds (so full pool only at top threshold).
+        const slice = Math.round(pool / thresholds.length);
+        if (split === 'equal') {
+          const per = activeDevs.length ? Math.round(slice / activeDevs.length) : 0;
+          for (const u of activeDevs) {
+            events.push({ id: newId(), dev_email: u.email, week_start: weekStart, type: 'team_pool', amount: per, currency: cur, status: 'pending', threshold, note: `Team pool — equal split at portfolio ${threshold}% (slice ${slice} / ${activeDevs.length} devs)` });
+          }
+        } else if (split === 'weighted') {
+          const weights = activeDevs.map(u => {
+            const dev = this.devs.find(d => d.email === u.email);
+            return dev ? this.strongDirections(dev).length : 0;
+          });
+          const total = weights.reduce((s, w) => s + w, 0) || 1;
+          activeDevs.forEach((u, i) => {
+            const per = Math.round(slice * weights[i] / total);
+            if (per > 0) events.push({ id: newId(), dev_email: u.email, week_start: weekStart, type: 'team_pool', amount: per, currency: cur, status: 'pending', threshold, note: `Team pool — weighted split at portfolio ${threshold}% (weight ${weights[i]}/${total})` });
+          });
+        } else if (split === 'true_north_only') {
+          const tnDevs = activeDevs.filter(u => {
+            const dev = this.devs.find(d => d.email === u.email);
+            return dev && this.hitTrueNorth(dev);
+          });
+          if (!tnDevs.length) {
+            events.push({ id: newId(), dev_email: '(unallocated)', week_start: weekStart, type: 'team_pool', amount: slice, currency: cur, status: 'unallocated', threshold, note: `Team pool — true_north_only split at portfolio ${threshold}% but no dev hit True North this week. Carries over.` });
+            continue;
+          }
+          const per = Math.round(slice / tnDevs.length);
+          for (const u of tnDevs) {
+            events.push({ id: newId(), dev_email: u.email, week_start: weekStart, type: 'team_pool', amount: per, currency: cur, status: 'pending', threshold, note: `Team pool — True North split at portfolio ${threshold}% (slice ${slice} / ${tnDevs.length} TN devs)` });
+          }
+        } else { // 'owner_decides'
+          events.push({ id: newId(), dev_email: '(owner_decides)', week_start: weekStart, type: 'team_pool', amount: slice, currency: cur, status: 'unallocated', threshold, note: `Team pool — ${slice} ${cur} unallocated at portfolio ${threshold}%. CEO/PM decide split (Settings → Rewards → Team pool split).` });
+        }
       }
       return events;
     },
@@ -3414,22 +3654,55 @@ function devdash() {
     // One-shot: compose current week's reward events for all devs (called from Settings as a demo seed, or from the weekly audit cron in prod)
     composeAllWeeklyRewards() {
       const wk = this.currentWeekStart();
-      const existing = new Set(this.rewardEvents.filter(e => e.week_start === wk).map(e => e.dev_email + ':' + e.type + ':' + (e.direction || '')));
+      // Idempotency key: includes project_id for owner_bonus and threshold for team_pool so we don't double-fire those.
+      const keyOf = (e) => e.dev_email + ':' + e.type + ':' + (e.direction || '') + ':' + (e.project_id || '') + ':' + (e.threshold != null ? e.threshold : '');
+      const existing = new Set(this.rewardEvents.filter(e => e.week_start === wk).map(keyOf));
+      // Owner bonus + team pool can fire across weeks; check the full history for those too.
+      const existingAllTime = new Set(this.rewardEvents.filter(e => e.type === 'owner_bonus' || e.type === 'team_pool').map(keyOf));
       let added = 0;
       for (const u of this.config.users.filter(x => x.role === 'dev' && x.status === 'active')) {
         const dev = this.devs.find(d => d.email === u.email);
         if (!dev) continue;
         const events = this.composeWeeklyRewards(dev, wk);
         for (const e of events) {
-          const key = e.dev_email + ':' + e.type + ':' + (e.direction || '');
-          if (!existing.has(key)) {
-            this.rewardEvents.push(e);
-            added++;
-          }
+          const k = keyOf(e);
+          if (existing.has(k)) continue;
+          if ((e.type === 'owner_bonus') && existingAllTime.has(k)) continue;
+          this.rewardEvents.push(e);
+          added++;
         }
+      }
+      // POOL-1 — team pool events (shared, fired once per crossed threshold across all time).
+      const poolEvents = this.composeTeamPoolEvents(wk);
+      for (const e of poolEvents) {
+        const k = keyOf(e);
+        if (existingAllTime.has(k)) continue;
+        this.rewardEvents.push(e);
+        added++;
       }
       this.save('rewardEvents');
       return added;
+    },
+    // CYCLE-1 FIX — predicate the CEO payout banner against the configured payout cycle, not just day-of-month.
+    isPayoutDueToday() {
+      const cycle = this.config.rewards.payout_cycle || 'monthly';
+      const now = new Date();
+      if (cycle === 'ad_hoc') return false;
+      if (cycle === 'monthly') return now.getDate() === (this.config.rewards.payout_day || 1);
+      if (cycle === 'weekly') return now.getDay() === 1; // Mondays
+      if (cycle === 'quarterly') return now.getDate() === 1 && [0, 3, 6, 9].includes(now.getMonth()); // Jan/Apr/Jul/Oct
+      return false;
+    },
+    payoutCycleLabel() {
+      const cycle = this.config.rewards.payout_cycle || 'monthly';
+      const names = { monthly: 'monthly', weekly: 'weekly', quarterly: 'quarterly', ad_hoc: 'ad-hoc' };
+      return names[cycle] || cycle;
+    },
+    // SYS-2 FIX — weekly audit reminder banner predicate.
+    isWeeklyAuditDay() {
+      const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      const expected = map[this.config.system?.weekly_audit_day || 'Sun'];
+      return new Date().getDay() === expected;
     },
     growthFocus(dev) {
       if (!dev || !dev.compass) return null;
@@ -3664,6 +3937,7 @@ function devdash() {
     },
     addBlocker() {
       if (!this.newBlocker.title) return;
+      if (!this._guard('addBlocker')) return;
       this.blockers.unshift({ id: Date.now(), title: this.newBlocker.title, waiting_on: this.newBlocker.waiting_on, project: this.newBlocker.project, days: 0, status: 'open' });
       this.save('blockers');
       this.newBlocker = { title: '', waiting_on: 'Fahad', project: '' };
@@ -3674,9 +3948,19 @@ function devdash() {
       this.$nextTick(() => { document.querySelector('[data-focus-stuck-pr]')?.focus(); });
     },
     addRegression() {
-      this.regressionCandidates.unshift({ id: Date.now(), current: '', past: '', past_week: 1, status: 'open' });
+      // H5 FIX — default project to active project filter (or first project) so the project tag is always set on creation.
+      const defaultProject = this.activeProject !== 'all'
+        ? (this.config.projects.find(p => p.id === this.activeProject)?.name || '')
+        : (this.config.projects[0]?.name || '');
+      this.regressionCandidates.unshift({ id: Date.now(), current: '', past: '', past_week: 1, status: 'open', project: defaultProject });
       this.save('regressionCandidates');
       this.$nextTick(() => { document.querySelector('[data-focus-regression]')?.focus(); });
+    },
+    // H5 FIX — scoped regression list. Untagged regressions show in "All projects" only.
+    filteredRegressionCandidates() {
+      if (this.activeProject === 'all') return this.regressionCandidates;
+      const projName = this.config.projects.find(p => p.id === this.activeProject)?.name;
+      return this.regressionCandidates.filter(r => r.project === projName || !r.project);
     },
     resolveDispute(id, outcome) {
       const d = this.disputes.find(x => x.id === id);
@@ -3814,6 +4098,8 @@ function devdash() {
       this.config.users.splice(idx, 1);
       // Clear user-specific localStorage keys so they don't leak
       localStorage.removeItem('devdash_provisioned_' + email);
+      // BUG-CONTRIB-3 FIX — explicit saveConfig so the cascade isn't at the mercy of the 250ms debounced watch.
+      this.saveConfig();
     },
 
     resolveBlocker(id) {
@@ -3830,7 +4116,10 @@ function devdash() {
       const proj = scoped ? this.config.projects.find(p => p.id === this.activeProject) : null;
       const projectBugs = scoped ? this.bugs.filter(b => b.project === proj?.name) : this.bugs;
       const projectPRs = scoped ? this.stuckPrs.filter(pr => (proj?.repos || []).some(r => r.includes(pr.repo))) : this.stuckPrs;
-      const projectRegressions = scoped ? this.regressionCandidates : this.regressionCandidates; // regression list doesn't yet carry a project tag; TODO wire when real
+      // H5 FIX — regressions now carry a project tag (or are untagged). Scoped views see project-tagged + untagged.
+      const projectRegressions = scoped
+        ? this.regressionCandidates.filter(r => r.project === proj?.name || !r.project)
+        : this.regressionCandidates;
       const highBugs = projectBugs.filter(b => b.status === 'open' && b.severity === 'HIGH').length;
       const stuck = projectPRs.length;
       const decisions = scoped
@@ -4065,7 +4354,16 @@ function devdash() {
     },
     addUser() {
       const newEmail = 'new' + Date.now() + '@phonebot.com.au';
-      this.config.users.push({ email: newEmail, displayName: 'New user', role: 'dev', hours_per_week: 40, status: 'active' });
+      // PROB-2 FIX — derive probation_end from rewards.new_hire_probation_weeks at add time so the dead-loop is closed:
+      // setting weeks ⇒ derived date ⇒ composeWeeklyRewards skip path actually fires.
+      const probWeeks = parseInt(this.config.rewards?.new_hire_probation_weeks || 0, 10) || 0;
+      let probation_end = null;
+      if (probWeeks > 0) {
+        const d = new Date();
+        d.setDate(d.getDate() + probWeeks * 7);
+        probation_end = d.toISOString().slice(0, 10);
+      }
+      this.config.users.push({ email: newEmail, displayName: 'New user', role: 'dev', hours_per_week: 40, status: 'active', probation_end });
       this.pendingQrEmail = newEmail;
       this.saveConfig();
     },
@@ -4076,6 +4374,14 @@ function devdash() {
       project.contributor_emails = [...list];
       this.saveConfig();
     },
+    // BUG-CONTRIB-2 FIX — when the owner changes, drop the new owner from contributor_emails so they aren't in both lists.
+    setProjectOwner(project, newEmail) {
+      project.owner_email = newEmail;
+      if (newEmail && Array.isArray(project.contributor_emails)) {
+        project.contributor_emails = project.contributor_emails.filter(e => e !== newEmail);
+      }
+      this.saveConfig();
+    },
     qrUrlFor(email) {
       const u = this.config.users.find(x => x.email === email);
       if (!u) return '';
@@ -4084,6 +4390,7 @@ function devdash() {
     },
 
     submitBug() {
+      if (!this._guard('submitBug')) return;
       const dev = this.suggestDevForBug(this.newBug.project);
       this.bugs.unshift({
         id: Date.now(),
@@ -4106,6 +4413,7 @@ function devdash() {
       this.newBug = { summary: '', project: 'Phonebot 2.0', severity: 'HIGH', details: '', device: 'desktop', browser: 'chrome', url: '', reproducible: 'always', steps: '', expected_actual: '' };
     },
     submitAudit() {
+      if (!this._guard('submitAudit')) return;
       const assignedTo = this.newAudit.assigned_to || (this.config.users.find(u => u.displayName === this.suggestDevForBug(this.newAudit.project))?.email || '');
       const cat = this.newAudit.category;
       this.auditFindings.unshift({
@@ -4215,6 +4523,7 @@ function devdash() {
       return this.config.users.find(u => u.email === this.currentUser?.email)?.absence || { type: 'none' };
     },
     submitFeature() {
+      if (!this._guard('submitFeature')) return;
       const target = this.newFeature.target_dev === 'auto' ? this.suggestDevForBug(this.newFeature.project) : this.newFeature.target_dev;
       this.featureRequests.unshift({ id: Date.now(), description: this.newFeature.description, urgency: this.newFeature.urgency, project: this.newFeature.project, requester: this.currentUser.displayName, target_dev: target, age_days: 0 });
       this.save('featureRequests');
@@ -4222,6 +4531,7 @@ function devdash() {
       this.showFeatureForm = false;
     },
     submitOffProject() {
+      if (!this._guard('submitOffProject')) return;
       // L08 FIX — guard against parseFloat('') = NaN silently poisoning dev hours
       const h = parseFloat(this.newOffProject.hours);
       if (!Number.isFinite(h) || h <= 0) {
@@ -4234,12 +4544,15 @@ function devdash() {
       if (!this.devMockData[email]) this.devMockData[email] = this.emptyDev();
       this.devMockData[email].off_project_hours = (this.devMockData[email].off_project_hours || 0) + h;
       this.devMockData[email].off_project_note = this.newOffProject.description + ' (' + this.newOffProject.status + ')';
+      // C2 FIX — persist devMockData so off-project hours survive reload
+      this.save('devMockData');
       this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Off-project', change: `Logged ${this.newOffProject.hours}h — ${this.newOffProject.description}` });
       this.save('auditLog');
       this.newOffProject = { description: '', hours: '', status: 'done' };
       this.showOffProjectForm = false;
     },
     submitPmAssessment() {
+      if (!this._guard('submitPmAssessment')) return;
       this.pmAssessments.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser.displayName, text: this.newPmAssessment, disagreement_flagged: this.newPmAssessment.length > 50 });
       this.save('pmAssessments');
       this.newPmAssessment = '';
@@ -4247,6 +4560,7 @@ function devdash() {
     },
     openDispute(type, itemId, itemLabel) { this.newDispute = { type, itemId, itemLabel, reason: '' }; this.showDisputeForm = true; },
     submitDispute() {
+      if (!this._guard('submitDispute')) return;
       const disputeId = Date.now();
       // I13 FIX — record the actually-attributed dev, not the disputing party
       // (a PM disputing on behalf of a dev should still log the dev's name so the reassign dropdown excludes them correctly)
