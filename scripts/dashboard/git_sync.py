@@ -20,10 +20,26 @@ import traceback
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
+
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except ImportError:  # pragma: no cover
+    ZoneInfo = None
 
 from scripts.dashboard.config import load_dashboard_config
 from scripts.dashboard.git_reader import read_commits_since
+
+
+# L05 FIX — tz-aware datetime so "today" slug matches the configured timezone (Melbourne / Karachi)
+# rather than the cron runner's local tz (often UTC on Cloudflare / Docker).
+def _now_in_tz(tz_name: Optional[str]) -> datetime:
+    if not tz_name or not ZoneInfo:
+        return datetime.now()
+    try:
+        return datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        return datetime.now()
 
 
 def _slug(name: str) -> str:
@@ -104,10 +120,13 @@ def sync_project(project, since_iso: str, out_dir: Path, today: str) -> dict:
 def run_sync(config_path: Path, out_dir: Path, since_days: int = 1) -> dict:
     """Entry point — sync all projects in the config."""
     config = load_dashboard_config(config_path)
-    # "since" = yesterday 00:00 local time (ISO format accepted by git)
-    since_dt = datetime.now() - timedelta(days=since_days)
+    # L05 FIX — use config-configured timezone ONLY if set; otherwise local naive time (backward compatible).
+    tz_name = getattr(config, "timezone", None) or getattr(getattr(config, "system", None), "timezone", None)
+    now = _now_in_tz(tz_name) if tz_name else datetime.now()
+    # "since" = yesterday 00:00 (ISO format accepted by git)
+    since_dt = now - timedelta(days=since_days)
     since_iso = since_dt.strftime("%Y-%m-%d 00:00")
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = now.strftime("%Y-%m-%d")
 
     per_project: List[dict] = []
     total_commits = 0

@@ -440,6 +440,22 @@
         </button>
       </div>
 
+      <!-- AI INSIGHTS banner (only visible if cached insights exist) -->
+      <template x-if="aiInsightsCache && aiInsightsCache.insights">
+        <details class="card p-4" style="border-left: 3px solid #60a5fa; background: rgba(96,165,250,0.04)">
+          <summary class="cursor-pointer">
+            <span class="text-[10px] uppercase tracking-widest" style="color: #60a5fa">✨ AI insights</span>
+            <span class="text-[11px] ml-2" style="color: var(--text-fade)" x-text="'Generated ' + aiInsightsCache.generated_at"></span>
+            <span class="text-[11px] ml-2" style="color: var(--text-muted)">· click to expand</span>
+          </summary>
+          <div class="text-sm whitespace-pre-wrap mt-3" style="color: var(--text)" x-text="aiInsightsCache.insights"></div>
+          <div class="mt-2 flex gap-2">
+            <button @click="generateAIInsights()" class="secondary text-xs" :disabled="aiInsightsLoading">🔄 Regenerate</button>
+            <button @click="aiInsightsCache = null; save('aiInsightsCache')" class="text-[10px] hover:underline" style="color: var(--text-fade)">Dismiss</button>
+          </div>
+        </details>
+      </template>
+
       <!-- PAYOUT DUE TODAY banner — CYCLE-1 FIX: predicate against payout_cycle, not just day-of-month. -->
       <template x-if="isPayoutDueToday() && totalPendingPayout() > 0">
         <div class="card p-4" style="background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(255,170,0,0.08)); border: 2px solid #f87171; animation: decision-breathe 2s ease-in-out infinite">
@@ -606,19 +622,19 @@
 
       <!-- Stats row (all clickable — jump to the relevant view) -->
       <div class="grid md:grid-cols-4 gap-4">
-        <button @click="activeRoleTab = 'qa'" class="card card-hover cursor-pointer p-4 text-left" title="Open QA view">
+        <button @click="bugSeverityFilter = 'HIGH'; bugStatusFilter = 'open'; activeRoleTab = 'qa'" class="card card-hover cursor-pointer p-4 text-left" title="Open QA view filtered to HIGH open bugs">
           <div class="text-xs text-gray-500 flex items-center justify-between">Open HIGH bugs <span style="color: var(--accent)">→</span></div>
           <div class="text-2xl font-bold text-rose-400" x-text="bugs.filter(b => b.severity === 'HIGH' && b.status === 'open').length"></div>
         </button>
-        <button @click="activeRoleTab = 'qa_auditor'" class="card card-hover cursor-pointer p-4 text-left" title="Open QA Auditor view">
+        <button @click="auditStatusFilter = 'open'; activeRoleTab = 'qa_auditor'" class="card card-hover cursor-pointer p-4 text-left" title="Open QA Auditor view filtered to open findings">
           <div class="text-xs text-gray-500 flex items-center justify-between">Open audit findings <span style="color: var(--accent)">→</span></div>
           <div class="text-2xl font-bold text-amber-400" x-text="auditFindings.filter(a => a.status === 'open').length"></div>
         </button>
-        <button @click="activeRoleTab = 'pm'" class="card card-hover cursor-pointer p-4 text-left" title="Open PM view (feature request list)">
+        <button @click="pmFocus = 'features'; activeRoleTab = 'pm'" class="card card-hover cursor-pointer p-4 text-left" title="Open PM view (feature request list)">
           <div class="text-xs text-gray-500 flex items-center justify-between">Feature requests this week <span style="color: var(--accent)">→</span></div>
           <div class="text-2xl font-bold text-blue-400" x-text="featureRequests.filter(f => f.age_days <= 7).length"></div>
         </button>
-        <button @click="activeRoleTab = 'pm'" class="card card-hover cursor-pointer p-4 text-left" title="Open PM view (stuck PR list)">
+        <button @click="pmFocus = 'stuck_prs'; activeRoleTab = 'pm'" class="card card-hover cursor-pointer p-4 text-left" title="Open PM view (stuck PR list)">
           <div class="text-xs text-gray-500 flex items-center justify-between">Stuck PRs (&gt;2d) <span style="color: var(--accent)">→</span></div>
           <div class="text-2xl font-bold text-amber-400" x-text="stuckPrs.length"></div>
         </button>
@@ -716,6 +732,9 @@
                     <div class="font-semibold" style="color: var(--text)" x-text="dev.displayName"></div>
                     <template x-if="isOwnerOfActiveProject(dev)"><span class="owner-pill">OWNER</span></template>
                     <template x-if="hitTrueNorth(dev)"><span class="true-north">TRUE NORTH</span></template>
+                    <template x-if="burnoutRisk(dev).risk !== 'none'">
+                      <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded" :style="burnoutRisk(dev).risk === 'high-output-burnout' ? 'background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.35)' : burnoutRisk(dev).risk === 'watch' ? 'background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent)' : 'background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.35)'" :title="burnoutRisk(dev).label" x-text="burnoutRisk(dev).label"></span>
+                    </template>
                     <template x-if="dev.absence && dev.absence.type !== 'none'">
                       <span class="absence-badge" :title="'Absent until ' + (dev.absence.until || 'return date not set')">
                         <span x-text="absenceIcon(dev.absence.type)"></span>
@@ -759,13 +778,16 @@
             <div class="card p-3 flex items-center justify-between gap-4">
               <div class="flex items-center gap-3 min-w-0 flex-1">
                 <div class="text-[10px] font-bold px-2 py-1 rounded flex-shrink-0" :class="bug.severity === 'HIGH' ? 'bg-rose-500/20 text-rose-400' : bug.severity === 'FUNCTIONAL' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'" x-text="bug.severity" :title="'Severity owned by QA — edit on QA view'"></div>
+                <template x-if="bug.disputed">
+                  <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0" style="background: rgba(96,165,250,0.15); color: #60a5fa; border: 1px solid rgba(96,165,250,0.35)" title="Dev has disputed — awaiting your decision">⚖ In dispute</span>
+                </template>
                 <div class="min-w-0 flex-1">
                   <div class="text-sm truncate" style="color: var(--text)" x-text="bug.summary"></div>
                   <div class="text-[11px] text-gray-500 flex items-center gap-1 flex-wrap">
                     <span x-text="bug.project"></span> ·
                     <span>Assigned to</span>
-                    <!-- PM can reassign (their actual job) -->
-                    <select :value="bug.assigned_to" @change="bug.assigned_to = $event.target.value; bug.reassigned_reason = 'Reassigned by PM on ' + new Date().toISOString().slice(0,10); save('bugs')" class="!p-0 !bg-transparent !border-0 !text-[11px] !w-auto font-semibold" style="color: var(--accent)">
+                    <!-- PM can reassign (their actual job) — with confirm + reason + audit log -->
+                    <select :value="bug.assigned_to" @change="reassignBug(bug, $event.target.value, $event)" class="!p-0 !bg-transparent !border-0 !text-[11px] !w-auto font-semibold" style="color: var(--accent)">
                       <option value="">Unassigned</option>
                       <template x-for="u in config.users.filter(x => x.role === 'dev' && x.status === 'active')" :key="u.email">
                         <option :value="u.displayName" x-text="u.displayName"></option>
@@ -1129,6 +1151,13 @@
                 </div>
               </div>
             </div>
+            <!-- Compass-score dispute — only visible on YOUR OWN view -->
+            <template x-if="currentUser && devViewTarget() && currentUser.email === devViewTarget().email">
+              <div class="mt-4 pt-3 text-[11px] flex items-center justify-between" style="border-top: 1px solid var(--divider); color: var(--text-fade)">
+                <span>Think a score is wrong? File a feedback-loop dispute — PM/CEO will review with you.</span>
+                <button @click="openDispute('score', devViewTarget().email, 'Compass week of ' + currentWeekStart())" class="secondary text-xs">⚖ Dispute my compass</button>
+              </div>
+            </template>
           </div>
 
           <!-- Growth Track — tips, streaks, writing feedback (3 sub-panels) -->
@@ -1408,7 +1437,10 @@
                       <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0" style="background: rgba(74,222,128,0.15); color: #4ade80" title="Dispute accepted — attribution cleared">✓ Dispute accepted</span>
                     </template>
                     <template x-if="b.dispute_resolution === 'rejected'">
-                      <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0" style="background: rgba(248,113,113,0.15); color: #f87171" title="Dispute rejected — attribution stands">✕ Dispute rejected</span>
+                      <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0" style="background: rgba(248,113,113,0.15); color: #f87171" title="Dispute rejected — attribution stands. Click 'Escalate' if you have new information.">✕ Dispute rejected</span>
+                    </template>
+                    <template x-if="b.dispute_resolution === 'rejected' && currentUser && currentUser.displayName === b.assigned_to">
+                      <button @click="escalateDispute('bug', b.id, b.summary)" class="text-[9px] flex-shrink-0 hover:underline px-1.5 py-0.5 rounded" style="color: #60a5fa; border: 1px solid rgba(96,165,250,0.35); background: rgba(96,165,250,0.08)" title="Escalate to CEO with new info">↑ Escalate</button>
                     </template>
                     <span class="text-[11px] flex-shrink-0" style="color: var(--text-fade)">·</span>
                     <span class="text-[11px] flex-shrink-0" style="color: var(--text-muted)" x-text="b.project"></span>
@@ -1693,7 +1725,7 @@
           <div class="text-xs uppercase tracking-wider text-gray-400">Past audit findings · <span x-text="filteredAuditFindings().length"></span></div>
           <div class="flex gap-2">
             <select x-model="auditCategoryFilter" class="!w-auto !text-xs"><option value="all">All categories</option><option value="performance">Performance</option><option value="responsive">Responsive</option><option value="code_quality">Code quality</option><option value="security">Security</option><option value="accessibility">Accessibility</option><option value="seo">SEO</option><option value="regression">Regression</option><option value="parity">Parity</option><option value="cross_browser">Cross-browser</option><option value="other">Other</option></select>
-            <select x-model="auditStatusFilter" class="!w-auto !text-xs"><option value="all">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="closed">Closed</option></select>
+            <select x-model="auditStatusFilter" class="!w-auto !text-xs"><option value="all">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
           </div>
         </div>
         <div class="space-y-3">
@@ -1725,6 +1757,7 @@
                   <select :value="a.status" @change="a.status = $event.target.value; save('auditFindings')" class="!w-auto !text-xs">
                     <option value="open">Open</option>
                     <option value="in_progress">In progress</option>
+                    <option value="resolved">Resolved</option>
                     <option value="closed">Closed</option>
                   </select>
                   <button @click="if (confirm('Delete audit finding: ' + a.title + '?')) { auditFindings = auditFindings.filter(x => x.id !== a.id); save('auditFindings'); }" class="danger text-[10px]" title="Delete this audit finding (only use for mis-filed / duplicate entries)">×</button>
@@ -1761,7 +1794,7 @@
       </div>
 
       <div class="flex gap-1 bg-black/30 inline-flex p-1 rounded-lg flex-wrap">
-        <template x-for="s in ['Projects','Users','Scoring','Rewards','System','Audit log']" :key="s">
+        <template x-for="s in ['Projects','Users','Scoring','Rewards','System','AI','Audit log']" :key="s">
           <button @click="activeSettingsTab = s" class="tab-btn text-[12px]" :class="{'active': activeSettingsTab === s}" x-text="s"></button>
         </template>
       </div>
@@ -1772,12 +1805,12 @@
           <div class="card p-5">
             <div class="grid md:grid-cols-2 gap-3">
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Name</label><input x-model="p.name"></div>
-              <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Owner</label><select :value="p.owner_email" @change="setProjectOwner(p, $event.target.value)"><option value="">(unowned)</option><template x-for="u in devs" :key="u.email"><option :value="u.email" x-text="u.displayName"></option></template></select></div>
+              <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Owner</label><select :value="p.owner_email" @change="p.owner_email = $event.target.value; save('config')"><option value="">(unowned)</option><template x-for="u in devs" :key="u.email"><option :value="u.email" :selected="u.email === p.owner_email" x-text="u.displayName"></option></template></select></div>
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Kickoff</label><input x-model="p.kickoff" type="date"></div>
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Deadline</label><input x-model="p.deadline" type="date"></div>
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Status</label><select x-model="p.status"><option>active</option><option>paused</option><option>archived</option></select></div>
               <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Sync cadence</label><select x-model="p.sync_cadence"><option>daily</option><option>weekly</option></select></div>
-              <div class="md:col-span-2"><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Repos (comma-separated)</label><input :value="p.repos.join(', ')" @change="p.repos = $event.target.value.split(',').map(s => s.trim())"></div>
+              <div class="md:col-span-2"><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Repos (comma-separated)</label><input :value="p.repos.join(', ')" @change="p.repos = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"></div>
               <div class="md:col-span-2">
                 <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-2">Contributors (extra devs working on this project)</label>
                 <div class="flex flex-wrap gap-2">
@@ -1963,7 +1996,7 @@
           <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Team bonus pool</div>
           <div class="grid md:grid-cols-2 gap-3">
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Pool (<span x-text="currencySym()"></span>)</label><input x-model.number="config.rewards.team_pool_aud" type="number"></div>
-            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Unlock thresholds (portfolio %)</label><input :value="config.rewards.unlock_thresholds.join(', ')" @change="config.rewards.unlock_thresholds = $event.target.value.split(',').map(s => parseInt(s.trim()))"></div>
+            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Unlock thresholds (portfolio %)</label><input :value="config.rewards.unlock_thresholds.join(', ')" @change="config.rewards.unlock_thresholds = $event.target.value.split(',').map(s => parseInt(s.trim(), 10)).filter(Number.isFinite).sort((a,b)=>a-b)"></div>
           </div>
         </div>
         <div class="card p-5">
@@ -2114,8 +2147,8 @@
         <div class="card p-5">
           <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Severity + urgency labels</div>
           <div class="grid md:grid-cols-2 gap-3">
-            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Bug severity labels</label><input :value="config.system.severity_labels.join(', ')" @change="config.system.severity_labels = $event.target.value.split(',').map(s => s.trim())"></div>
-            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Feature urgency labels</label><input :value="config.system.urgency_labels.join(', ')" @change="config.system.urgency_labels = $event.target.value.split(',').map(s => s.trim())"></div>
+            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Bug severity labels</label><input :value="config.system.severity_labels.join(', ')" @change="config.system.severity_labels = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"></div>
+            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Feature urgency labels</label><input :value="config.system.urgency_labels.join(', ')" @change="config.system.urgency_labels = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"></div>
           </div>
         </div>
         <div class="card p-5">
@@ -2125,8 +2158,13 @@
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">AWS region</label><input x-model="config.system.aws.region"></div>
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Dashboard URL</label><input x-model="config.system.aws.dashboard_url"></div>
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Daily digest email time</label><input x-model="config.system.aws.digest_time" placeholder="08:00"></div>
-            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Digest recipients</label><input :value="config.system.aws.digest_recipients.join(', ')" @change="config.system.aws.digest_recipients = $event.target.value.split(',').map(s => s.trim())"></div>
+            <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Digest recipients</label><input :value="config.system.aws.digest_recipients.join(', ')" @change="config.system.aws.digest_recipients = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"></div>
           </div>
+        </div>
+        <div class="card p-5">
+          <div class="text-xs uppercase tracking-wider mb-2" style="color: var(--accent)">📦 Data export</div>
+          <div class="text-[11px] mb-3" style="color: var(--text-muted)">One-click dump of every localStorage key into a single JSON file. Use this for backups, moving to another host, or handing a snapshot to external audit. Does not include session or TOTP secrets.</div>
+          <button @click="exportAllData()" class="primary text-xs">Export all data → .json</button>
         </div>
         <div class="card p-5" style="border-color: rgba(248,113,113,0.25)">
           <div class="text-xs uppercase tracking-wider mb-2" style="color: #f87171">Danger zone</div>
@@ -2140,6 +2178,60 @@
           <button @click="resetAllDashboardData()" class="danger">Wipe all dashboard data (go-live)</button>
         </div>
         <div class="text-[11px] text-center py-2" style="color: var(--text-fade)">✓ System changes save automatically</div>
+      </div>
+
+      <!-- AI (Anthropic API + insight generation) -->
+      <div x-show="activeSettingsTab === 'AI'" class="space-y-4">
+        <div class="card p-5">
+          <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">AI insights</div>
+          <div class="text-[11px] mb-3" style="color: var(--text-muted)">devdash can use an LLM API to surface signals the numbers alone miss — "Faizan's handoff clarity dropped 3 weeks running", "Moazzam closed 12 bugs but introduced 4 regressions". Runs on-demand, cached 24h.</div>
+          <div class="grid md:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Provider</label>
+              <select x-model="config.system.ai_provider">
+                <option value="none">Off (no AI insights)</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="custom">Custom endpoint</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Model</label>
+              <input x-model="config.system.ai_model" placeholder="e.g. claude-sonnet-4-5">
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">API key (stored in localStorage — NOT checked into git)</label>
+              <input x-model="config.system.ai_api_key" type="password" placeholder="sk-ant-...">
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Custom endpoint (if provider = custom)</label>
+              <input x-model="config.system.ai_endpoint" placeholder="https://api.example.com/v1/messages">
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Insight cache TTL (hours)</label>
+              <input x-model.number="config.system.ai_cache_hours" type="number" min="1" max="168">
+            </div>
+            <div>
+              <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Monthly budget ceiling (USD)</label>
+              <input x-model.number="config.system.ai_monthly_budget_usd" type="number" placeholder="10">
+            </div>
+          </div>
+          <div class="pt-3" style="border-top: 1px solid var(--divider)">
+            <div class="text-[10px] uppercase tracking-wider mb-2" style="color: var(--text-muted)">Insight prompts (template — used each weekly audit)</div>
+            <textarea x-model="config.system.ai_prompts" rows="6" placeholder="One prompt per line. Example:&#10;Which dev's handoff clarity has dropped most in the last 4 weeks? Name, specific examples, 1-line fix.&#10;Which project is most at-risk of missing deadline? Why?&#10;Are any devs showing burnout signals (sustained high compass + heavy off-project)?"></textarea>
+          </div>
+          <div class="flex gap-2 mt-3 flex-wrap">
+            <button @click="generateAIInsights()" class="primary text-xs" :disabled="!config.system.ai_provider || config.system.ai_provider === 'none'">✨ Generate insights now</button>
+            <button @click="aiInsightsCache = {}; save('aiInsightsCache')" class="secondary text-xs">Clear cache</button>
+            <span class="text-[10px] self-center" style="color: var(--text-fade)">Last run: <span x-text="aiInsightsCache?.generated_at || 'never'"></span></span>
+          </div>
+          <template x-if="aiInsightsCache && aiInsightsCache.insights">
+            <div class="card p-4 mt-3">
+              <div class="text-[10px] uppercase tracking-wider mb-2" style="color: var(--accent)">Latest insights</div>
+              <div class="text-sm whitespace-pre-wrap" style="color: var(--text)" x-text="aiInsightsCache.insights"></div>
+            </div>
+          </template>
+        </div>
       </div>
 
       <!-- Audit log -->
@@ -2209,19 +2301,22 @@
       </div>
     </div>
   </div>
-  <!-- Dispute modal -->
+  <!-- Dispute modal — type-aware prompts (score dispute reads differently) -->
   <div x-show="showDisputeForm" @click.self="showDisputeForm = false" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" x-cloak>
     <div class="glass rounded-xl p-6 w-full max-w-lg fade-in">
-      <div class="flex items-center justify-between mb-4"><div class="text-lg text-white font-semibold">Dispute this finding</div><button @click="showDisputeForm = false" class="text-gray-400 hover:text-white">✕</button></div>
-      <p class="text-xs text-gray-400 mb-3">Disputing a finding flags it for PM review. It doesn't remove the finding — it just adds your side of the story. PM + CEO review disputes at the end of the week.</p>
-      <div class="card p-3 mb-3 text-xs text-gray-300">
-        <div class="text-[10px] uppercase tracking-wider text-gray-500 mb-1">You're disputing</div>
-        <div class="font-mono text-[11px] text-gray-500" x-text="newDispute.type + ' · ' + newDispute.itemId"></div>
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-lg font-semibold" style="color: var(--text)" x-text="newDispute.type === 'score' ? 'Feedback on your compass score' : 'Dispute this finding'"></div>
+        <button @click="showDisputeForm = false" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+      <p class="text-xs mb-3" style="color: var(--text-muted)" x-text="newDispute.type === 'score' ? 'Think your score is wrong or doesn\'t reflect what you actually did this week? File feedback. PM + CEO review in the weekly retro. Your score isn\'t changed automatically — this opens a conversation with receipts.' : 'Disputing a finding flags it for PM review. It doesn\'t remove the finding — it just adds your side of the story. PM + CEO review disputes at the end of the week.'"></p>
+      <div class="card p-3 mb-3 text-xs" style="color: var(--text-muted)">
+        <div class="text-[10px] uppercase tracking-wider mb-1" style="color: var(--text-fade)" x-text="newDispute.type === 'score' ? 'Feedback on' : 'You\'re disputing'"></div>
+        <div class="font-mono text-[11px]" style="color: var(--text-fade)" x-text="newDispute.type + ' · ' + newDispute.itemId"></div>
         <div class="mt-1" x-text="newDispute.itemLabel"></div>
       </div>
-      <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Your reason (be specific)</label>
-      <textarea x-model="newDispute.reason" rows="4" placeholder="e.g. This bug is actually caused by Usama's refactor in commit abc1234, not my commit. Here's why..."></textarea>
-      <button @click="submitDispute()" class="primary w-full mt-3" :disabled="!newDispute.reason">Submit dispute</button>
+      <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1" x-text="newDispute.type === 'score' ? 'Your feedback (what did this score miss? be specific — PRs reviewed, research spikes, mentoring, customer escalations...)' : 'Your reason (be specific)'"></label>
+      <textarea x-model="newDispute.reason" rows="5" :placeholder="newDispute.type === 'score' ? 'e.g. Craft score shows 68 but that week I also did 12h of PR review for Moazzam + Usama and handled a P0 customer escalation. None of that shows in commits.' : 'e.g. This bug is actually caused by Usama\'s refactor in commit abc1234, not my commit. Here\'s why...'"></textarea>
+      <button @click="submitDispute()" class="primary w-full mt-3" :disabled="!newDispute.reason" x-text="newDispute.type === 'score' ? '📝 Submit feedback' : 'Submit dispute'"></button>
     </div>
   </div>
 
@@ -2459,7 +2554,7 @@
                 <div class="text-xs italic" style="color: var(--text-fade)">No phases yet. Click Edit above, then "+ Add phase".</div>
               </template>
               <div class="space-y-3">
-                <template x-for="(ph, phIdx) in (projectDetail().phases || [])" :key="phIdx">
+                <template x-for="(ph, phIdx) in (projectDetail().phases || [])" :key="ph.id || phIdx">
                   <div>
                     <template x-if="!projectDetailEdit">
                       <div>
@@ -2502,7 +2597,7 @@
                 <div class="text-xs italic" style="color: var(--text-fade)">No checklist yet. Click Edit above, then "+ Add item".</div>
               </template>
               <div class="space-y-1.5">
-                <template x-for="(ri, riIdx) in (projectDetail().readiness || [])" :key="riIdx">
+                <template x-for="(ri, riIdx) in (projectDetail().readiness || [])" :key="ri.id || riIdx">
                   <div class="flex items-center gap-3 p-2 rounded hover:bg-white/5">
                     <input type="checkbox" class="!w-auto !p-0 !m-0 flex-shrink-0" :checked="ri.done" @change="toggleReadinessItem(projectDetail(), riIdx)">
                     <template x-if="!projectDetailEdit">
@@ -2554,7 +2649,7 @@
                 <div class="text-xs italic" style="color: var(--text-fade)">No links yet. Click Edit above to add spec docs, audit reports, wireframes.</div>
               </template>
               <div class="space-y-1.5 text-sm">
-                <template x-for="(ln, lnIdx) in (projectDetail().links || [])" :key="lnIdx">
+                <template x-for="(ln, lnIdx) in (projectDetail().links || [])" :key="ln.id || lnIdx">
                   <div class="flex items-center gap-2">
                     <template x-if="!projectDetailEdit">
                       <a :href="ln.url" target="_blank" class="hover:underline flex-1" style="color: var(--accent)" x-text="'→ ' + ln.label"></a>
@@ -2649,7 +2744,7 @@
                 </div>
               </div>
               <button @click="resolveBlocker(b.id)" class="secondary text-xs" title="Mark resolved">✓ Resolve</button>
-              <button @click="if (confirm('Delete this blocker?')) removeBlocker(b.id)" class="danger" title="Delete">×</button>
+              <button @click="if (confirm('Delete this blocker?\n\n' + b.title + '\n\n(id #' + b.id + ')')) removeBlocker(b.id)" class="danger" title="Delete">×</button>
             </div>
           </template>
         </div>
@@ -2670,7 +2765,7 @@
                     </div>
                   </div>
                   <button @click="resolveBlocker(b.id)" class="secondary text-xs">✓ Resolve</button>
-                  <button @click="if (confirm('Delete this blocker?')) removeBlocker(b.id)" class="danger">×</button>
+                  <button @click="if (confirm('Delete this blocker?\n\n' + b.title + '\n\n(id #' + b.id + ')')) removeBlocker(b.id)" class="danger">×</button>
                 </div>
               </template>
             </div>
@@ -2718,6 +2813,7 @@ function devdash() {
     rewardEvents: [], // [{id, dev_email, week_start, type, direction, amount, currency, status, paid_at, paid_by, payout_batch_id, note}]
     payoutBatches: [], // [{id, ref, paid_at, paid_by, approved_by, event_ids, total, currency, note}]
     showPayoutModal: false, payoutDraft: { ref: '', note: '', selected_ids: [], ceo_approved: false, pm_approved: false },
+    aiInsightsCache: null, aiInsightsLoading: false, aiInsightsError: null,
     // Learning resource library per direction — editable in Settings → Scoring later
     learningResources: {
       velocity: [
@@ -2766,6 +2862,7 @@ function devdash() {
     auditStatusFilter: 'all',
     bugStatusFilter: 'all',
     bugSeverityFilter: 'all',
+    pmFocus: null,
     newFeature: { project: 'Phonebot 2.0', description: '', urgency: 'medium', target_dev: 'auto' },
     newOffProject: { description: '', hours: '', status: 'done' },
     newPmAssessment: '',
@@ -2941,6 +3038,19 @@ function devdash() {
         severity_labels: ['HIGH','FUNCTIONAL','VISUAL'],
         urgency_labels: ['low','medium','high'],
         aws: { region: 'ap-southeast-2', dashboard_url: 'devdash.phonebot.co.uk', digest_time: '08:00', digest_recipients: ['fahad@phonebot.com.au','imran@phonebot.com.au'] },
+        // AI insight generation — off by default; Fahad enables once he has an API key.
+        ai_provider: 'none',           // none / anthropic / openai / custom
+        ai_model: 'claude-sonnet-4-5',
+        ai_api_key: '',
+        ai_endpoint: '',
+        ai_cache_hours: 24,
+        ai_monthly_budget_usd: 10,
+        ai_prompts: [
+          "Which dev's handoff clarity dropped most in the last 4 weeks? Name them, give 2 specific examples from their notes, and one 1-line fix.",
+          "Which project is most at risk of missing its deadline? Why? Quote the exact percent_complete and days_remaining.",
+          "Are any devs showing burnout signals (sustained high compass + heavy off-project hours OR low compass + heavy off-project)? Name them, explain the pattern.",
+          "Are any bugs being re-opened or pattern-matching to past closed bugs? List top 3 regression candidates.",
+        ].join('\n'),
       },
     },
 
@@ -3101,10 +3211,31 @@ function devdash() {
     ],
 
     init() {
-      const savedTheme = localStorage.getItem('devdash_theme');
-      if (savedTheme) this.theme = savedTheme;
+      // U07 FIX — tolerate both plain ("cream") and JSON-encoded ('"cream"') theme values in localStorage.
+      // Older sessions may have stored the JSON-encoded form; strip quotes if present.
+      const rawTheme = localStorage.getItem('devdash_theme');
+      if (rawTheme) {
+        let t = rawTheme;
+        if (t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"') {
+          try { t = JSON.parse(t); } catch (e) { t = t.slice(1, -1); }
+        }
+        if (['dark','light','cream'].includes(t)) {
+          this.theme = t;
+          // Re-write as plain string so future reads never double-stringify.
+          localStorage.setItem('devdash_theme', t);
+        }
+      }
       const savedDensity = localStorage.getItem('devdash_density');
-      if (savedDensity) this.density = savedDensity;
+      if (savedDensity) {
+        let d = savedDensity;
+        if (d.length >= 2 && d[0] === '"' && d[d.length - 1] === '"') {
+          try { d = JSON.parse(d); } catch (e) { d = d.slice(1, -1); }
+        }
+        if (['comfortable','compact'].includes(d)) {
+          this.density = d;
+          localStorage.setItem('devdash_density', d);
+        }
+      }
       // Persist density whenever it changes (theme has its own cycleTheme handler).
       this.$watch('density', v => localStorage.setItem('devdash_density', v));
       this.currentQuote = this.quotes[0];
@@ -3117,14 +3248,14 @@ function devdash() {
           const { user, ts } = JSON.parse(saved);
           if (Date.now() - ts < 24 * 60 * 60 * 1000) {
             this.currentUser = user;
-            this.activeRoleTab = this.visibleRoleTabs()[0];
+            this.activeRoleTab = this.defaultTabFor(this.currentUser.role);
             if (this.currentUser.role === 'dev') this.devViewSelected = this.currentUser.email;
           }
         } catch (e) {}
       }
       const defaultConfig = JSON.parse(JSON.stringify(this.config));
       this.corruptStorageKeys = [];
-      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','devMockData'].forEach(key => {
+      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','aiInsightsCache','devMockData'].forEach(key => {
         const s = localStorage.getItem('devdash_' + key);
         // L11 FIX — don't silently swallow corrupt keys; log + surface to user so months of data don't vanish unnoticed
         if (s) {
@@ -3159,6 +3290,15 @@ function devdash() {
       }
       // Schema migration: merge missing fields from defaults so stale localStorage doesn't mask new keys.
       this.migrateConfig(defaultConfig);
+      // U09 FIX — clean up any blank stuck PR / regression rows that were persisted before the validation gate landed.
+      if (Array.isArray(this.stuckPrs) && this.stuckPrs.some(pr => !(pr.pr_id || '').toString().trim())) {
+        this.stuckPrs = this.stuckPrs.filter(pr => (pr.pr_id || '').toString().trim() !== '');
+        this.save('stuckPrs');
+      }
+      if (Array.isArray(this.regressionCandidates) && this.regressionCandidates.some(r => !(r.current || '').toString().trim())) {
+        this.regressionCandidates = this.regressionCandidates.filter(r => (r.current || '').toString().trim() !== '');
+        this.save('regressionCandidates');
+      }
       // Auto-save any config change (so CEO/PM don't need to hit "Save" on every field).
       // L10 FIX — wrapped in try/catch + debounce; surfaces quota-exceed instead of silent drop.
       let _configSaveTimer = null;
@@ -3217,6 +3357,12 @@ function devdash() {
       for (const b of (this.bugs || [])) {
         if (b.disputed === undefined) b.disputed = false;
       }
+      // L13 FIX — backfill stable ids on existing phase/readiness/link items so x-for reorder doesn't break them
+      for (const p of (this.config.projects || [])) {
+        for (const ph of (p.phases || [])) if (!ph.id) ph.id = this.nextId();
+        for (const ri of (p.readiness || [])) if (!ri.id) ri.id = this.nextId();
+        for (const ln of (p.links || [])) if (!ln.id) ln.id = this.nextId();
+      }
       // H5 FIX — backfill regression project tag on records created before the field existed.
       for (const r of (this.regressionCandidates || [])) {
         if (r.project === undefined) r.project = '';
@@ -3231,6 +3377,145 @@ function devdash() {
       location.reload();
     },
     // I07 FIX — accurate confirm + clear session + provisioned flags so re-added users work
+    // Feature — data export. One-click JSON dump of every localStorage key (excluding session + provisioned).
+    // Feature — burnout detection. Signal = sustained >90 avg compass for 4+ consecutive weeks (from rewardEvents history).
+    // Real-data version checks compass_snapshots table in prod; here we use reward frequency as a proxy.
+    burnoutRisk(dev) {
+      if (!dev || !dev.email) return { risk: 'none', label: '' };
+      // Count weeks with True North OR 4+ direction events in last 8 weeks
+      const sinceMs = Date.now() - 8 * 7 * 86400000;
+      const sinceKey = new Date(sinceMs).toISOString().slice(0, 10);
+      const events = this.rewardEvents.filter(e => e.dev_email === dev.email && e.week_start >= sinceKey);
+      const weeksWithTn = new Set(events.filter(e => e.type === 'true_north').map(e => e.week_start)).size;
+      const weeksWith4Dirs = new Set();
+      const byWeek = {};
+      for (const e of events.filter(e => e.type === 'direction')) {
+        byWeek[e.week_start] = (byWeek[e.week_start] || 0) + 1;
+        if (byWeek[e.week_start] >= 4) weeksWith4Dirs.add(e.week_start);
+      }
+      const sustainedHigh = Math.max(weeksWithTn, weeksWith4Dirs.size);
+      // Current-compass fallback if no history (e.g. first weeks)
+      const currentAvg = Math.round((dev.compass.velocity + dev.compass.craft + dev.compass.reliability + dev.compass.drive) / 4);
+      if (sustainedHigh >= 4) return { risk: 'high-output-burnout', label: `🔥 ${sustainedHigh}w sustained high — check in on rest` };
+      if (sustainedHigh >= 3) return { risk: 'watch', label: `📈 ${sustainedHigh}w strong — watch for fatigue` };
+      if (currentAvg < 45 && dev.off_project_hours > 15) return { risk: 'low-and-drained', label: `🫤 Low compass + heavy off-project — overloaded?` };
+      return { risk: 'none', label: '' };
+    },
+    // Feature — AI insights. Sends a structured context bundle to the configured provider.
+    // Cached in localStorage for `ai_cache_hours` so repeat opens don't re-bill.
+    async generateAIInsights() {
+      const cfg = this.config.system;
+      if (!cfg.ai_provider || cfg.ai_provider === 'none') { alert('AI provider is off. Enable in Settings → AI.'); return; }
+      if (!cfg.ai_api_key && cfg.ai_provider !== 'custom') { alert('API key missing. Add one in Settings → AI.'); return; }
+      // Cache check
+      if (this.aiInsightsCache && this.aiInsightsCache.generated_at) {
+        const ageH = (Date.now() - new Date(this.aiInsightsCache.generated_at).getTime()) / 3600000;
+        if (ageH < (cfg.ai_cache_hours || 24)) {
+          if (!confirm(`Last insights are ${ageH.toFixed(1)}h old (cache TTL ${cfg.ai_cache_hours}h). Re-generate anyway? Each call costs money.`)) return;
+        }
+      }
+      this.aiInsightsLoading = true;
+      this.aiInsightsError = null;
+      // Build a structured context snapshot (no PII secrets, just structural data)
+      const snapshot = {
+        week_start: this.currentWeekStart(),
+        projects: this.config.projects.map(p => ({ id: p.id, name: p.name, traffic_light: p.traffic_light, percent_complete: p.percent_complete, days_remaining: p.days_remaining, forecast_launch: p.forecast_launch })),
+        devs: this.devs.map(d => ({ name: d.displayName, compass: d.compass, handoff_mult: d.handoff_mult, off_project_hours: d.off_project_hours, items_closed: d.items_closed, summary: d.summary })),
+        bugs_open: this.bugs.filter(b => b.status === 'open').length,
+        bugs_high_open: this.bugs.filter(b => b.status === 'open' && b.severity === 'HIGH').length,
+        audits_open: this.auditFindings.filter(a => a.status === 'open').length,
+        disputes_open: this.disputes.filter(d => d.status === 'open').length,
+        stuck_prs: this.stuckPrs.length,
+        regressions: this.regressionCandidates.length,
+        reward_events_pending: this.rewardEvents.filter(e => e.status === 'pending').length,
+      };
+      const systemPrompt = 'You are a senior engineering manager reviewing a weekly dev-team dashboard. Be terse, specific, and honest. Quote exact numbers from the snapshot. No hedging. Answer each question in 1-2 sentences.';
+      const userPrompt = 'Dashboard snapshot:\n' + JSON.stringify(snapshot, null, 2) + '\n\nAnswer these questions:\n' + (cfg.ai_prompts || '');
+      try {
+        const endpoint = cfg.ai_provider === 'anthropic' ? 'https://api.anthropic.com/v1/messages'
+          : cfg.ai_provider === 'openai' ? 'https://api.openai.com/v1/chat/completions'
+          : cfg.ai_endpoint;
+        const headers = { 'Content-Type': 'application/json' };
+        let body;
+        if (cfg.ai_provider === 'anthropic') {
+          headers['x-api-key'] = cfg.ai_api_key;
+          headers['anthropic-version'] = '2023-06-01';
+          body = JSON.stringify({
+            model: cfg.ai_model || 'claude-sonnet-4-5',
+            max_tokens: 1500,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: userPrompt }],
+          });
+        } else if (cfg.ai_provider === 'openai') {
+          headers['Authorization'] = 'Bearer ' + cfg.ai_api_key;
+          body = JSON.stringify({
+            model: cfg.ai_model || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            max_tokens: 1500,
+          });
+        } else {
+          // custom endpoint — send as anthropic-shaped; user owns the adapter
+          if (cfg.ai_api_key) headers['Authorization'] = 'Bearer ' + cfg.ai_api_key;
+          body = JSON.stringify({ model: cfg.ai_model, system: systemPrompt, user: userPrompt });
+        }
+        const res = await fetch(endpoint, { method: 'POST', headers, body });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error('AI API ' + res.status + ': ' + errText.slice(0, 300));
+        }
+        const data = await res.json();
+        let insights = '';
+        if (cfg.ai_provider === 'anthropic') insights = data.content?.[0]?.text || JSON.stringify(data);
+        else if (cfg.ai_provider === 'openai') insights = data.choices?.[0]?.message?.content || JSON.stringify(data);
+        else insights = data.text || data.content || JSON.stringify(data);
+        this.aiInsightsCache = { generated_at: new Date().toISOString(), insights, snapshot_hash: JSON.stringify(snapshot).length };
+        this.save('aiInsightsCache');
+        this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'AI', change: `Generated insights (${cfg.ai_provider} / ${cfg.ai_model})` });
+        this.save('auditLog');
+        alert('Insights generated. See Settings → AI or CEO view banner.');
+      } catch (e) {
+        this.aiInsightsError = e.message;
+        alert('AI call failed: ' + e.message);
+      } finally {
+        this.aiInsightsLoading = false;
+      }
+    },
+    exportAllData() {
+      const payload = {
+        version: 1,
+        exported_at: new Date().toISOString(),
+        exported_by: this.currentUser?.displayName || '—',
+        config: this.config,
+        bugs: this.bugs,
+        auditFindings: this.auditFindings,
+        featureRequests: this.featureRequests,
+        disputes: this.disputes,
+        blockers: this.blockers,
+        stuckPrs: this.stuckPrs,
+        regressionCandidates: this.regressionCandidates,
+        pmAssessments: this.pmAssessments,
+        clockEntries: this.clockEntries,
+        rewardEvents: this.rewardEvents,
+        payoutBatches: this.payoutBatches,
+        growthLog: this.growthLog,
+        auditLog: this.auditLog,
+      };
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `devdash-export-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Data export', change: `Exported ${Object.keys(payload).length - 3} data keys to JSON` });
+      this.save('auditLog');
+    },
     resetConfigToDefaults() {
       if (!confirm([
         'Reset ALL settings to defaults? This will:',
@@ -3267,6 +3552,18 @@ function devdash() {
       }
     },
     storageFull: false, _storageWarnedOnce: false, corruptStorageKeys: [],
+    // L14 FIX — monotonic ID counter (seeded from max-of-all-known-ids at first call). Avoids Date.now() collisions during bursts.
+    _idCounter: 0,
+    nextId() {
+      if (!this._idCounter) {
+        const ids = [];
+        for (const arr of [this.bugs, this.auditFindings, this.featureRequests, this.disputes, this.blockers, this.stuckPrs, this.regressionCandidates, this.pmAssessments, this.rewardEvents, this.payoutBatches, this.auditLog]) {
+          if (Array.isArray(arr)) for (const x of arr) if (x && typeof x.id === 'number') ids.push(x.id);
+        }
+        this._idCounter = ids.length ? Math.max(...ids) : Date.now();
+      }
+      return ++this._idCounter;
+    },
     // M1 FIX — single-flight guard for submit handlers to block double-submits.
     _inFlight: {},
     _guard(name) {
@@ -3277,7 +3574,7 @@ function devdash() {
     },
     saveConfig() {
       localStorage.setItem('devdash_config', JSON.stringify(this.config));
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: this.activeSettingsTab, change: 'Saved ' + this.activeSettingsTab.toLowerCase() + ' section' });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: this.activeSettingsTab, change: 'Saved ' + this.activeSettingsTab.toLowerCase() + ' section' });
       this.save('auditLog');
     },
 
@@ -3295,7 +3592,7 @@ function devdash() {
       localStorage.setItem('devdash_provisioned_' + this.selectedUser.email, '1');
       this.currentUser = { ...this.selectedUser };
       localStorage.setItem('devdash_session', JSON.stringify({ user: this.currentUser, ts: Date.now() }));
-      this.activeRoleTab = this.visibleRoleTabs()[0];
+      this.activeRoleTab = this.defaultTabFor(this.currentUser.role);
       if (this.currentUser.role === 'dev') this.devViewSelected = this.currentUser.email;
       this.loginStep = 'pick'; this.selectedUser = null; this.codeInput = '';
     },
@@ -3311,6 +3608,13 @@ function devdash() {
       viewer: ['ceo'],
     },
     visibleRoleTabs() { return this.VISIBILITY[this.currentUser?.role] || []; },
+    // U04 FIX — default landing tab matches user's own role, not VISIBILITY[0] (which is 'dev' for QA / QA Auditor)
+    defaultTabFor(role) {
+      const map = { ceo: 'ceo', pm: 'pm', dev: 'dev', qa: 'qa', qa_auditor: 'qa_auditor', viewer: 'ceo' };
+      const target = map[role];
+      const tabs = this.VISIBILITY[role] || [];
+      return target && tabs.includes(target) ? target : tabs[0];
+    },
 
     roleLabel(r) { return { ceo:'CEO', pm:'PM', dev:'Dev', qa:'QA', qa_auditor:'QA Auditor', viewer:'Viewer', settings:'Settings' }[r] || r; },
     roleColor(r) { return { ceo:'bg-amber-500/20 text-amber-400', pm:'bg-blue-500/20 text-blue-400', dev:'bg-emerald-500/20 text-emerald-400', qa:'bg-purple-500/20 text-purple-400', qa_auditor:'bg-rose-500/20 text-rose-400', viewer:'bg-gray-500/20 text-gray-400' }[r] || 'bg-gray-500/20 text-gray-400'; },
@@ -3636,7 +3940,7 @@ function devdash() {
       });
       this.save('rewardEvents');
       this.save('payoutBatches');
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Rewards', change: `Paid ${selected.length} events (${this.formatMoney(total)} ${this.config.rewards.currency}) via ref ${this.payoutDraft.ref}` });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Rewards', change: `Paid ${selected.length} events (${this.formatMoney(total)} ${this.config.rewards.currency}) via ref ${this.payoutDraft.ref}` });
       this.save('auditLog');
       this.showPayoutModal = false;
       alert('Payout confirmed. ' + selected.length + ' events marked paid, ref ' + this.payoutDraft.ref);
@@ -3648,7 +3952,7 @@ function devdash() {
       this.payoutBatches = [];
       this.save('rewardEvents');
       this.save('payoutBatches');
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Rewards', change: 'HARD RESET: all reward history deleted' });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Rewards', change: 'HARD RESET: all reward history deleted' });
       this.save('auditLog');
     },
     // One-shot: compose current week's reward events for all devs (called from Settings as a demo seed, or from the weekly audit cron in prod)
@@ -3725,10 +4029,9 @@ function devdash() {
       };
     },
     _weekKey() {
-      const d = new Date();
-      const oneJan = new Date(d.getFullYear(), 0, 1);
-      const wk = Math.ceil((((d - oneJan) / 86400000) + oneJan.getDay() + 1) / 7);
-      return d.getFullYear() + '-W' + String(wk).padStart(2, '0');
+      // L07 FIX — use currentWeekStart() (Monday local date) as the canonical week id.
+      // Avoids ISO-week edge cases around Jan 1 which the old formula got wrong.
+      return this.currentWeekStart();
     },
     challengeDoneThisWeek(dev) {
       if (!dev) return false;
@@ -3938,23 +4241,64 @@ function devdash() {
     addBlocker() {
       if (!this.newBlocker.title) return;
       if (!this._guard('addBlocker')) return;
-      this.blockers.unshift({ id: Date.now(), title: this.newBlocker.title, waiting_on: this.newBlocker.waiting_on, project: this.newBlocker.project, days: 0, status: 'open' });
+      this.blockers.unshift({ id: this.nextId(), title: this.newBlocker.title, waiting_on: this.newBlocker.waiting_on, project: this.newBlocker.project, days: 0, status: 'open' });
       this.save('blockers');
       this.newBlocker = { title: '', waiting_on: 'Fahad', project: '' };
     },
+    // PM-reassign flow — deeper than just mutating assigned_to. Confirms intent, captures reason,
+    // logs to audit, resets days_open so the new dev sees a fresh ticket. Maintains reassignment history.
+    reassignBug(bug, newAssignee, event) {
+      const old = bug.assigned_to || 'unassigned';
+      if (old === newAssignee) return;
+      const reason = prompt(`Reassigning "${bug.summary.slice(0, 60)}"\n\nFrom: ${old}\nTo:   ${newAssignee || 'unassigned'}\n\nWhy? (required — this becomes part of the audit trail)`, '');
+      if (!reason) {
+        // User cancelled or left blank — revert the dropdown
+        if (event && event.target) event.target.value = old;
+        return;
+      }
+      // Record the reassignment in a per-bug history
+      bug.reassignment_history = bug.reassignment_history || [];
+      bug.reassignment_history.push({
+        from: old,
+        to: newAssignee,
+        by: this.currentUser?.displayName || '—',
+        at: new Date().toISOString().slice(0, 10),
+        reason: reason,
+      });
+      bug.assigned_to = newAssignee;
+      bug.reassigned_reason = reason;
+      // Reset days_open so the new dev's counter starts fresh (old dev's handling is in history)
+      bug.days_open = 0;
+      this.save('bugs');
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Bugs', change: `Reassigned bug #${bug.id} "${bug.summary.slice(0, 40)}" from ${old} to ${newAssignee}. Reason: ${reason}` });
+      this.save('auditLog');
+    },
     addStuckPr() {
-      this.stuckPrs.unshift({ id: Date.now(), pr_id: '', repo: '', days_stuck: 1, waiting_on: this.config.users.find(u => u.role === 'dev')?.displayName || '' });
+      // U09 FIX — prune any existing blank rows before adding, so repeated + clicks don't stockpile empties.
+      this.pruneBlankStuckPrs();
+      this.stuckPrs.unshift({ id: this.nextId(), pr_id: '', repo: '', days_stuck: 1, waiting_on: this.config.users.find(u => u.role === 'dev')?.displayName || '' });
       this.save('stuckPrs');
       this.$nextTick(() => { document.querySelector('[data-focus-stuck-pr]')?.focus(); });
     },
+    pruneBlankStuckPrs() {
+      const before = this.stuckPrs.length;
+      this.stuckPrs = this.stuckPrs.filter(pr => (pr.pr_id || '').toString().trim() !== '');
+      if (this.stuckPrs.length !== before) this.save('stuckPrs');
+    },
     addRegression() {
+      this.pruneBlankRegressions();
       // H5 FIX — default project to active project filter (or first project) so the project tag is always set on creation.
       const defaultProject = this.activeProject !== 'all'
         ? (this.config.projects.find(p => p.id === this.activeProject)?.name || '')
         : (this.config.projects[0]?.name || '');
-      this.regressionCandidates.unshift({ id: Date.now(), current: '', past: '', past_week: 1, status: 'open', project: defaultProject });
+      this.regressionCandidates.unshift({ id: this.nextId(), current: '', past: '', past_week: 1, status: 'open', project: defaultProject });
       this.save('regressionCandidates');
       this.$nextTick(() => { document.querySelector('[data-focus-regression]')?.focus(); });
+    },
+    pruneBlankRegressions() {
+      const before = this.regressionCandidates.length;
+      this.regressionCandidates = this.regressionCandidates.filter(r => (r.current || '').toString().trim() !== '');
+      if (this.regressionCandidates.length !== before) this.save('regressionCandidates');
     },
     // H5 FIX — scoped regression list. Untagged regressions show in "All projects" only.
     filteredRegressionCandidates() {
@@ -3975,9 +4319,20 @@ function devdash() {
           bug.disputed = false;
           bug.dispute_resolution = outcome;
           // I10 FIX — Accepted = dev was right, re-route to project owner instead of leaving ownerless
+          // U11 FIX — if the disputing dev IS the project owner, clearing to owner is a no-op.
+          // Unassign + surface a follow-up prompt so PM picks the right re-triage target.
           if (outcome === 'accepted') {
-            bug.assigned_to = this.suggestDevForBug(bug.project);
-            bug.reassigned_reason = 'Dispute accepted on ' + new Date().toISOString().slice(0,10) + ' — routed back to project owner';
+            const suggested = this.suggestDevForBug(bug.project);
+            const project = this.config.projects.find(p => p.name === bug.project);
+            const ownerName = project && project.owner_email ? (this.config.users.find(u => u.email === project.owner_email)?.displayName || '') : '';
+            if (suggested === d.disputed_by || suggested === ownerName && ownerName === d.disputed_by) {
+              bug.assigned_to = '';
+              bug.reassigned_reason = 'Dispute accepted on ' + new Date().toISOString().slice(0,10) + ' — project owner was the disputer, PM must re-triage';
+              alert('Dispute accepted.\n\nThe disputing dev (' + d.disputed_by + ') is the project owner for "' + bug.project + '", so the bug can\'t auto-route back to them. It\'s now UNASSIGNED — pick a new owner from the bug queue dropdown.');
+            } else {
+              bug.assigned_to = suggested;
+              bug.reassigned_reason = 'Dispute accepted on ' + new Date().toISOString().slice(0,10) + ' — routed back to project owner';
+            }
           }
           this.save('bugs');
         }
@@ -4093,7 +4448,7 @@ function devdash() {
         this.save('rewardEvents');
       }
       // 8. Audit log + splice user
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Users', change: `Removed ${name} (${email}) — bugs/features/disputes/audits/blockers reconciled, pending rewards ${rule === 'forfeit' ? 'voided' : 'preserved'}` });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Users', change: `Removed ${name} (${email}) — bugs/features/disputes/audits/blockers reconciled, pending rewards ${rule === 'forfeit' ? 'voided' : 'preserved'}` });
       this.save('auditLog');
       this.config.users.splice(idx, 1);
       // Clear user-specific localStorage keys so they don't leak
@@ -4142,9 +4497,9 @@ function devdash() {
       if (scoped && proj) {
         const lightLabel = proj.traffic_light === 'red' ? 'behind' : proj.traffic_light === 'yellow' ? 'at risk' : 'on track';
         const lightColour = proj.traffic_light === 'red' ? '#f87171' : proj.traffic_light === 'yellow' ? 'var(--accent)' : '#4ade80';
-        lead = `☕  On <strong style="color: var(--accent)">${proj.name}</strong> — <span style="color: ${lightColour}">${lightLabel}</span> at <strong>${proj.percent_complete}%</strong> · forecast <strong>${proj.forecast_launch}</strong> · ${proj.days_remaining}d remaining.`;
+        lead = `☕  On <strong style="color: var(--accent)">${this._esc(proj.name)}</strong> — <span style="color: ${lightColour}">${lightLabel}</span> at <strong>${Number(proj.percent_complete) || 0}%</strong> · forecast <strong>${this._esc(proj.forecast_launch)}</strong> · ${Number(proj.days_remaining) || 0}d remaining.`;
       } else if (r > 0) {
-        lead = `☕  Three things on the table today — starting with <strong class="text-rose-400">${behindProjects[0]?.name || 'the red one'}</strong>.`;
+        lead = `☕  Three things on the table today — starting with <strong class="text-rose-400">${this._esc(behindProjects[0]?.name || 'the red one')}</strong>.`;
       } else if (y > 0) {
         lead = `☕  Nothing on fire, but <strong class="text-amber-400">${y} ${y === 1 ? 'project is' : 'projects are'}</strong> drifting. Catch them now, not Friday.`;
       } else {
@@ -4163,11 +4518,11 @@ function devdash() {
         scoped && (proj?.readiness || []).length ? `✅ Launch readiness: <strong>${this.readinessPct(proj)}%</strong> (<span>${(proj.readiness || []).filter(r => r.done).length}/${(proj.readiness || []).length}</span> ticked).` : '',
       ].filter(Boolean).join('<br>');
 
-      const standout = !scoped && top ? `🌟 <strong style="color: var(--accent)">${top.displayName}</strong> has the strongest compass this week — worth a public shout-out.` : '';
+      const standout = !scoped && top ? `🌟 <strong style="color: var(--accent)">${this._esc(top.displayName)}</strong> has the strongest compass this week — worth a public shout-out.` : '';
       const offBlurb = scoped
         ? ''
         : (offHours > 20 ? `🫤 Team burned <strong class="text-amber-400">${offHours}h</strong> on off-project work. Legacy is eating Wednesday.` : `📊 Off-project drain manageable (${offHours}h).`);
-      const projectTail = scoped && proj ? `<div class="mt-3 pt-3 text-[11px]" style="border-top: 1px solid var(--divider); color: var(--text-muted)">Owner: <strong style="color: var(--accent)">${this.ownerName(proj)}</strong>${(proj.contributor_emails || []).length ? ' · Contributors: ' + (proj.contributor_emails || []).map(e => this.userNameByEmail(e)).join(', ') : ''} · <em>Click the project card below for full scope + readiness checklist.</em></div>` : '';
+      const projectTail = scoped && proj ? `<div class="mt-3 pt-3 text-[11px]" style="border-top: 1px solid var(--divider); color: var(--text-muted)">Owner: <strong style="color: var(--accent)">${this._esc(this.ownerName(proj))}</strong>${(proj.contributor_emails || []).length ? ' · Contributors: ' + (proj.contributor_emails || []).map(e => this._esc(this.userNameByEmail(e))).join(', ') : ''} · <em>Click the project card below for full scope + readiness checklist.</em></div>` : '';
       const teamTail = (standout || offBlurb) ? `<div class="mt-3 pt-3" style="border-top: 1px solid var(--divider); color: var(--text-muted)">${standout}${standout && offBlurb ? '<br>' : ''}${offBlurb}</div>` : '';
 
       return `
@@ -4318,11 +4673,12 @@ function devdash() {
       project.readiness[idx].done = !project.readiness[idx].done;
       project.readiness = [...project.readiness];
     },
-    addReadinessItem(project) { project.readiness = [...(project.readiness || []), { item: 'New item', done: false }]; },
+    // L13 FIX — give every phase/readiness/link a stable id so x-for reorder-on-splice doesn't rebind inputs.
+    addReadinessItem(project) { project.readiness = [...(project.readiness || []), { id: this.nextId(), item: 'New item', done: false }]; },
     removeReadinessItem(project, idx) { project.readiness.splice(idx, 1); project.readiness = [...project.readiness]; },
-    addPhase(project) { project.phases = [...(project.phases || []), { name: 'New phase', status: 'planned', percent: 0 }]; },
+    addPhase(project) { project.phases = [...(project.phases || []), { id: this.nextId(), name: 'New phase', status: 'planned', percent: 0 }]; },
     removePhase(project, idx) { project.phases.splice(idx, 1); project.phases = [...project.phases]; },
-    addLink(project) { project.links = [...(project.links || []), { label: 'New link', url: '' }]; },
+    addLink(project) { project.links = [...(project.links || []), { id: this.nextId(), label: 'New link', url: '' }]; },
     removeLink(project, idx) { project.links.splice(idx, 1); project.links = [...project.links]; },
     readinessPct(project) {
       const r = project.readiness || [];
@@ -4347,7 +4703,7 @@ function devdash() {
       for (const a of this.auditFindings) if (a.project === p.name) a.project = archivedLabel;
       for (const f of this.featureRequests) if (f.project === p.name) f.project = archivedLabel;
       this.save('bugs'); this.save('auditFindings'); this.save('featureRequests');
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Projects', change: `Removed project ${p.name} — archived ${bugsCount} bugs + ${auditsCount} audits + ${frCount} feature requests` });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Projects', change: `Removed project ${p.name} — archived ${bugsCount} bugs + ${auditsCount} audits + ${frCount} feature requests` });
       this.save('auditLog');
       this.config.projects.splice(idx, 1);
       this.saveConfig();
@@ -4393,7 +4749,7 @@ function devdash() {
       if (!this._guard('submitBug')) return;
       const dev = this.suggestDevForBug(this.newBug.project);
       this.bugs.unshift({
-        id: Date.now(),
+        id: this.nextId(),
         summary: this.newBug.summary,
         severity: this.newBug.severity,
         project: this.newBug.project,
@@ -4417,7 +4773,7 @@ function devdash() {
       const assignedTo = this.newAudit.assigned_to || (this.config.users.find(u => u.displayName === this.suggestDevForBug(this.newAudit.project))?.email || '');
       const cat = this.newAudit.category;
       this.auditFindings.unshift({
-        id: Date.now(),
+        id: this.nextId(),
         title: this.newAudit.title,
         project: this.newAudit.project,
         findings: this.newAudit.findings,
@@ -4453,6 +4809,18 @@ function devdash() {
     },
     userNameByEmail(email) {
       return this.config.users.find(u => u.email === email)?.displayName || email;
+    },
+    // L12 FIX — escape helper for any user/config-supplied string interpolated into x-html output.
+    // Keeps the `<strong>` styling in coaching lines but prevents <script>/<img onerror> from a malicious
+    // direction.label or displayName being rendered as HTML.
+    _esc(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     },
     formatMoney(n) {
       if (n == null || isNaN(n)) return '0';
@@ -4495,7 +4863,11 @@ function devdash() {
       if (!this.currentUser) return;
       const u = this.config.users.find(x => x.email === this.currentUser.email);
       if (!u) return;
-      u.absence = { type, until: until || '', note: note || '' };
+      const next = { type, until: until || '', note: note || '' };
+      u.absence = next;
+      // U08 FIX — currentUser is a snapshot (see tryLogin: `{...this.selectedUser}`). Keep it
+      // in sync so any code path still reading currentUser.absence stays fresh until re-login.
+      if (this.currentUser) this.currentUser.absence = next;
       this.saveConfig();
     },
     logSickRetro(days) {
@@ -4508,7 +4880,7 @@ function devdash() {
       const sinceStr = since.toISOString().slice(0, 10);
       const todayStr = today.toISOString().slice(0, 10);
       // Push an audit log entry so PM/CEO see the retro log (not a live absence).
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T', ' ').slice(0, 16), who: u.displayName, section: 'Absence', change: 'Logged sick leave: ' + sinceStr + ' to ' + todayStr + ' (' + days + ' day' + (days === 1 ? '' : 's') + ')' });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T', ' ').slice(0, 16), who: u.displayName, section: 'Absence', change: 'Logged sick leave: ' + sinceStr + ' to ' + todayStr + ' (' + days + ' day' + (days === 1 ? '' : 's') + ')' });
       this.save('auditLog');
       // Clear any active absence — they're back.
       u.absence = { type: 'none', until: '', note: '', last_sick_log: { since: sinceStr, until: todayStr, days } };
@@ -4517,15 +4889,26 @@ function devdash() {
     },
     clearSelfAbsence() {
       const u = this.config.users.find(x => x.email === this.currentUser?.email);
-      if (u) { u.absence = { type: 'none', until: '', note: '' }; this.saveConfig(); }
+      if (u) {
+        const next = { type: 'none', until: '', note: '' };
+        u.absence = next;
+        if (this.currentUser) this.currentUser.absence = next;
+        this.saveConfig();
+      }
     },
     myAbsence() {
       return this.config.users.find(u => u.email === this.currentUser?.email)?.absence || { type: 'none' };
     },
     submitFeature() {
+      // U10 FIX — reject empty descriptions (matches the off-project-log validation pattern).
+      const desc = (this.newFeature.description || '').trim();
+      if (!desc) {
+        alert('Description required. Tell the assigned dev what you want built (one sentence is fine).');
+        return;
+      }
       if (!this._guard('submitFeature')) return;
       const target = this.newFeature.target_dev === 'auto' ? this.suggestDevForBug(this.newFeature.project) : this.newFeature.target_dev;
-      this.featureRequests.unshift({ id: Date.now(), description: this.newFeature.description, urgency: this.newFeature.urgency, project: this.newFeature.project, requester: this.currentUser.displayName, target_dev: target, age_days: 0 });
+      this.featureRequests.unshift({ id: this.nextId(), description: desc, urgency: this.newFeature.urgency, project: this.newFeature.project, requester: this.currentUser.displayName, target_dev: target, age_days: 0 });
       this.save('featureRequests');
       this.newFeature = { project: 'Phonebot 2.0', description: '', urgency: 'medium', target_dev: 'auto' };
       this.showFeatureForm = false;
@@ -4546,19 +4929,58 @@ function devdash() {
       this.devMockData[email].off_project_note = this.newOffProject.description + ' (' + this.newOffProject.status + ')';
       // C2 FIX — persist devMockData so off-project hours survive reload
       this.save('devMockData');
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Off-project', change: `Logged ${this.newOffProject.hours}h — ${this.newOffProject.description}` });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Off-project', change: `Logged ${this.newOffProject.hours}h — ${this.newOffProject.description}` });
       this.save('auditLog');
       this.newOffProject = { description: '', hours: '', status: 'done' };
       this.showOffProjectForm = false;
     },
     submitPmAssessment() {
       if (!this._guard('submitPmAssessment')) return;
-      this.pmAssessments.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser.displayName, text: this.newPmAssessment, disagreement_flagged: this.newPmAssessment.length > 50 });
+      this.pmAssessments.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser.displayName, text: this.newPmAssessment, disagreement_flagged: this.newPmAssessment.length > 50 });
       this.save('pmAssessments');
       this.newPmAssessment = '';
       this.showPmAssessmentForm = false;
     },
     openDispute(type, itemId, itemLabel) { this.newDispute = { type, itemId, itemLabel, reason: '' }; this.showDisputeForm = true; },
+    // Feature — dispute escalation. After PM rejects a dispute, dev can re-open with new info.
+    // Escalation flips status back to 'open' and flags for CEO review (waiting_on = 'Fahad').
+    escalateDispute(type, itemId, itemLabel) {
+      const newInfo = prompt(`Escalate rejected dispute: "${itemLabel.slice(0, 60)}"\n\nWhat new information / context do you have that the PM didn't consider? (required)`, '');
+      if (!newInfo) return;
+      // Find the most recent rejected dispute for this item
+      const rejected = this.disputes
+        .filter(d => d.type === type && d.itemId === itemId && d.status === 'rejected')
+        .sort((a, b) => b.id - a.id)[0];
+      if (!rejected) { alert('No prior rejected dispute found for this item.'); return; }
+      // Create an escalation — new dispute chained to the original
+      const escId = this.nextId();
+      this.disputes.unshift({
+        id: escId,
+        when: new Date().toISOString().replace('T',' ').slice(0,16),
+        dev: rejected.dev,
+        disputed_by: this.currentUser.displayName,
+        type,
+        itemId,
+        itemLabel,
+        reason: '[ESCALATED] ' + newInfo,
+        status: 'open',
+        escalation_of: rejected.id,
+        escalation_level: (rejected.escalation_level || 1) + 1,
+        waiting_on: 'Fahad', // CEO review for escalations
+      });
+      // Re-flag the item as disputed
+      if (type === 'bug') {
+        const bug = this.bugs.find(b => b.id === itemId);
+        if (bug) { bug.disputed = true; bug.dispute_id = escId; bug.dispute_resolution = null; this.save('bugs'); }
+      } else if (type === 'audit') {
+        const audit = this.auditFindings.find(a => a.id === itemId);
+        if (audit) { audit.disputed = true; audit.dispute_id = escId; audit.dispute_resolution = null; this.save('auditFindings'); }
+      }
+      this.save('disputes');
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser.displayName, section: 'Dispute escalation', change: `Escalated ${type} dispute #${rejected.id} → new dispute #${escId} (level ${(rejected.escalation_level || 1) + 1}). Waiting on CEO.` });
+      this.save('auditLog');
+      alert('Escalated. CEO will review. Old status kept in dispute history.');
+    },
     submitDispute() {
       if (!this._guard('submitDispute')) return;
       const disputeId = Date.now();
