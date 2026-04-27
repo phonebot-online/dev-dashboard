@@ -606,19 +606,19 @@
 
       <!-- Stats row (all clickable — jump to the relevant view) -->
       <div class="grid md:grid-cols-4 gap-4">
-        <button @click="activeRoleTab = 'qa'" class="card card-hover cursor-pointer p-4 text-left" title="Open QA view">
+        <button @click="bugSeverityFilter = 'HIGH'; bugStatusFilter = 'open'; activeRoleTab = 'qa'" class="card card-hover cursor-pointer p-4 text-left" title="Open QA view filtered to HIGH open bugs">
           <div class="text-xs text-gray-500 flex items-center justify-between">Open HIGH bugs <span style="color: var(--accent)">→</span></div>
           <div class="text-2xl font-bold text-rose-400" x-text="bugs.filter(b => b.severity === 'HIGH' && b.status === 'open').length"></div>
         </button>
-        <button @click="activeRoleTab = 'qa_auditor'" class="card card-hover cursor-pointer p-4 text-left" title="Open QA Auditor view">
+        <button @click="auditStatusFilter = 'open'; activeRoleTab = 'qa_auditor'" class="card card-hover cursor-pointer p-4 text-left" title="Open QA Auditor view filtered to open findings">
           <div class="text-xs text-gray-500 flex items-center justify-between">Open audit findings <span style="color: var(--accent)">→</span></div>
           <div class="text-2xl font-bold text-amber-400" x-text="auditFindings.filter(a => a.status === 'open').length"></div>
         </button>
-        <button @click="activeRoleTab = 'pm'" class="card card-hover cursor-pointer p-4 text-left" title="Open PM view (feature request list)">
+        <button @click="pmFocus = 'features'; activeRoleTab = 'pm'" class="card card-hover cursor-pointer p-4 text-left" title="Open PM view (feature request list)">
           <div class="text-xs text-gray-500 flex items-center justify-between">Feature requests this week <span style="color: var(--accent)">→</span></div>
           <div class="text-2xl font-bold text-blue-400" x-text="featureRequests.filter(f => f.age_days <= 7).length"></div>
         </button>
-        <button @click="activeRoleTab = 'pm'" class="card card-hover cursor-pointer p-4 text-left" title="Open PM view (stuck PR list)">
+        <button @click="pmFocus = 'stuck_prs'; activeRoleTab = 'pm'" class="card card-hover cursor-pointer p-4 text-left" title="Open PM view (stuck PR list)">
           <div class="text-xs text-gray-500 flex items-center justify-between">Stuck PRs (&gt;2d) <span style="color: var(--accent)">→</span></div>
           <div class="text-2xl font-bold text-amber-400" x-text="stuckPrs.length"></div>
         </button>
@@ -1693,7 +1693,7 @@
           <div class="text-xs uppercase tracking-wider text-gray-400">Past audit findings · <span x-text="filteredAuditFindings().length"></span></div>
           <div class="flex gap-2">
             <select x-model="auditCategoryFilter" class="!w-auto !text-xs"><option value="all">All categories</option><option value="performance">Performance</option><option value="responsive">Responsive</option><option value="code_quality">Code quality</option><option value="security">Security</option><option value="accessibility">Accessibility</option><option value="seo">SEO</option><option value="regression">Regression</option><option value="parity">Parity</option><option value="cross_browser">Cross-browser</option><option value="other">Other</option></select>
-            <select x-model="auditStatusFilter" class="!w-auto !text-xs"><option value="all">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="closed">Closed</option></select>
+            <select x-model="auditStatusFilter" class="!w-auto !text-xs"><option value="all">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
           </div>
         </div>
         <div class="space-y-3">
@@ -1725,6 +1725,7 @@
                   <select :value="a.status" @change="a.status = $event.target.value; save('auditFindings')" class="!w-auto !text-xs">
                     <option value="open">Open</option>
                     <option value="in_progress">In progress</option>
+                    <option value="resolved">Resolved</option>
                     <option value="closed">Closed</option>
                   </select>
                   <button @click="if (confirm('Delete audit finding: ' + a.title + '?')) { auditFindings = auditFindings.filter(x => x.id !== a.id); save('auditFindings'); }" class="danger text-[10px]" title="Delete this audit finding (only use for mis-filed / duplicate entries)">×</button>
@@ -2649,7 +2650,7 @@
                 </div>
               </div>
               <button @click="resolveBlocker(b.id)" class="secondary text-xs" title="Mark resolved">✓ Resolve</button>
-              <button @click="if (confirm('Delete this blocker?')) removeBlocker(b.id)" class="danger" title="Delete">×</button>
+              <button @click="if (confirm('Delete this blocker?\n\n' + b.title + '\n\n(id #' + b.id + ')')) removeBlocker(b.id)" class="danger" title="Delete">×</button>
             </div>
           </template>
         </div>
@@ -2670,7 +2671,7 @@
                     </div>
                   </div>
                   <button @click="resolveBlocker(b.id)" class="secondary text-xs">✓ Resolve</button>
-                  <button @click="if (confirm('Delete this blocker?')) removeBlocker(b.id)" class="danger">×</button>
+                  <button @click="if (confirm('Delete this blocker?\n\n' + b.title + '\n\n(id #' + b.id + ')')) removeBlocker(b.id)" class="danger">×</button>
                 </div>
               </template>
             </div>
@@ -2766,6 +2767,7 @@ function devdash() {
     auditStatusFilter: 'all',
     bugStatusFilter: 'all',
     bugSeverityFilter: 'all',
+    pmFocus: null,
     newFeature: { project: 'Phonebot 2.0', description: '', urgency: 'medium', target_dev: 'auto' },
     newOffProject: { description: '', hours: '', status: 'done' },
     newPmAssessment: '',
@@ -3101,10 +3103,30 @@ function devdash() {
     ],
 
     init() {
-      const savedTheme = localStorage.getItem('devdash_theme');
-      if (savedTheme) this.theme = savedTheme;
+      // U07 FIX — tolerate both plain ("cream") and JSON-encoded ('"cream"') theme values in localStorage.
+      // Older sessions may have stored the JSON-encoded form; strip quotes if present.
+      const rawTheme = localStorage.getItem('devdash_theme');
+      if (rawTheme) {
+        let t = rawTheme;
+        if (t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"') {
+          try { t = JSON.parse(t); } catch (e) { t = t.slice(1, -1); }
+        }
+        if (['dark','light','cream'].includes(t)) {
+          this.theme = t;
+          localStorage.setItem('devdash_theme', t);
+        }
+      }
       const savedDensity = localStorage.getItem('devdash_density');
-      if (savedDensity) this.density = savedDensity;
+      if (savedDensity) {
+        let d = savedDensity;
+        if (d.length >= 2 && d[0] === '"' && d[d.length - 1] === '"') {
+          try { d = JSON.parse(d); } catch (e) { d = d.slice(1, -1); }
+        }
+        if (['comfortable','compact'].includes(d)) {
+          this.density = d;
+          localStorage.setItem('devdash_density', d);
+        }
+      }
       // Persist density whenever it changes (theme has its own cycleTheme handler).
       this.$watch('density', v => localStorage.setItem('devdash_density', v));
       this.currentQuote = this.quotes[0];
@@ -3117,7 +3139,7 @@ function devdash() {
           const { user, ts } = JSON.parse(saved);
           if (Date.now() - ts < 24 * 60 * 60 * 1000) {
             this.currentUser = user;
-            this.activeRoleTab = this.visibleRoleTabs()[0];
+            this.activeRoleTab = this.defaultTabFor(this.currentUser.role);
             if (this.currentUser.role === 'dev') this.devViewSelected = this.currentUser.email;
           }
         } catch (e) {}
@@ -3159,6 +3181,15 @@ function devdash() {
       }
       // Schema migration: merge missing fields from defaults so stale localStorage doesn't mask new keys.
       this.migrateConfig(defaultConfig);
+      // U09 FIX — clean up any blank stuck PR / regression rows that were persisted before the validation gate landed.
+      if (Array.isArray(this.stuckPrs) && this.stuckPrs.some(pr => !(pr.pr_id || '').toString().trim())) {
+        this.stuckPrs = this.stuckPrs.filter(pr => (pr.pr_id || '').toString().trim() !== '');
+        this.save('stuckPrs');
+      }
+      if (Array.isArray(this.regressionCandidates) && this.regressionCandidates.some(r => !(r.current || '').toString().trim())) {
+        this.regressionCandidates = this.regressionCandidates.filter(r => (r.current || '').toString().trim() !== '');
+        this.save('regressionCandidates');
+      }
       // Auto-save any config change (so CEO/PM don't need to hit "Save" on every field).
       // L10 FIX — wrapped in try/catch + debounce; surfaces quota-exceed instead of silent drop.
       let _configSaveTimer = null;
@@ -3275,9 +3306,24 @@ function devdash() {
       setTimeout(() => { this._inFlight[name] = false; }, 1500);
       return true;
     },
+    // L14 FIX — monotonic ID counter (seeded from max-of-all-known-ids at first call).
+    // Avoids Date.now() collisions during bursts (esp. now that _guard rate-limits but
+    // doesn't fully serialise across views).
+    _idCounter: 0,
+    nextId() {
+      if (!this._idCounter) {
+        const ids = [];
+        const arrays = [this.bugs, this.auditFindings, this.featureRequests, this.disputes, this.blockers, this.stuckPrs, this.regressionCandidates, this.pmAssessments, this.rewardEvents, this.payoutBatches, this.auditLog];
+        for (const arr of arrays) {
+          if (Array.isArray(arr)) for (const x of arr) if (x && typeof x.id === 'number') ids.push(x.id);
+        }
+        this._idCounter = ids.length ? Math.max(...ids) : Date.now();
+      }
+      return ++this._idCounter;
+    },
     saveConfig() {
       localStorage.setItem('devdash_config', JSON.stringify(this.config));
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: this.activeSettingsTab, change: 'Saved ' + this.activeSettingsTab.toLowerCase() + ' section' });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: this.activeSettingsTab, change: 'Saved ' + this.activeSettingsTab.toLowerCase() + ' section' });
       this.save('auditLog');
     },
 
@@ -3295,7 +3341,7 @@ function devdash() {
       localStorage.setItem('devdash_provisioned_' + this.selectedUser.email, '1');
       this.currentUser = { ...this.selectedUser };
       localStorage.setItem('devdash_session', JSON.stringify({ user: this.currentUser, ts: Date.now() }));
-      this.activeRoleTab = this.visibleRoleTabs()[0];
+      this.activeRoleTab = this.defaultTabFor(this.currentUser.role);
       if (this.currentUser.role === 'dev') this.devViewSelected = this.currentUser.email;
       this.loginStep = 'pick'; this.selectedUser = null; this.codeInput = '';
     },
@@ -3311,6 +3357,13 @@ function devdash() {
       viewer: ['ceo'],
     },
     visibleRoleTabs() { return this.VISIBILITY[this.currentUser?.role] || []; },
+    // U04 FIX — default landing tab matches user's own role, not VISIBILITY[0] (which is 'dev' for QA / QA Auditor)
+    defaultTabFor(role) {
+      const map = { ceo: 'ceo', pm: 'pm', dev: 'dev', qa: 'qa', qa_auditor: 'qa_auditor', viewer: 'ceo' };
+      const target = map[role];
+      const tabs = this.VISIBILITY[role] || [];
+      return target && tabs.includes(target) ? target : tabs[0];
+    },
 
     roleLabel(r) { return { ceo:'CEO', pm:'PM', dev:'Dev', qa:'QA', qa_auditor:'QA Auditor', viewer:'Viewer', settings:'Settings' }[r] || r; },
     roleColor(r) { return { ceo:'bg-amber-500/20 text-amber-400', pm:'bg-blue-500/20 text-blue-400', dev:'bg-emerald-500/20 text-emerald-400', qa:'bg-purple-500/20 text-purple-400', qa_auditor:'bg-rose-500/20 text-rose-400', viewer:'bg-gray-500/20 text-gray-400' }[r] || 'bg-gray-500/20 text-gray-400'; },
@@ -3636,7 +3689,7 @@ function devdash() {
       });
       this.save('rewardEvents');
       this.save('payoutBatches');
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Rewards', change: `Paid ${selected.length} events (${this.formatMoney(total)} ${this.config.rewards.currency}) via ref ${this.payoutDraft.ref}` });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Rewards', change: `Paid ${selected.length} events (${this.formatMoney(total)} ${this.config.rewards.currency}) via ref ${this.payoutDraft.ref}` });
       this.save('auditLog');
       this.showPayoutModal = false;
       alert('Payout confirmed. ' + selected.length + ' events marked paid, ref ' + this.payoutDraft.ref);
@@ -3648,7 +3701,7 @@ function devdash() {
       this.payoutBatches = [];
       this.save('rewardEvents');
       this.save('payoutBatches');
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Rewards', change: 'HARD RESET: all reward history deleted' });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Rewards', change: 'HARD RESET: all reward history deleted' });
       this.save('auditLog');
     },
     // One-shot: compose current week's reward events for all devs (called from Settings as a demo seed, or from the weekly audit cron in prod)
@@ -3938,23 +3991,36 @@ function devdash() {
     addBlocker() {
       if (!this.newBlocker.title) return;
       if (!this._guard('addBlocker')) return;
-      this.blockers.unshift({ id: Date.now(), title: this.newBlocker.title, waiting_on: this.newBlocker.waiting_on, project: this.newBlocker.project, days: 0, status: 'open' });
+      this.blockers.unshift({ id: this.nextId(), title: this.newBlocker.title, waiting_on: this.newBlocker.waiting_on, project: this.newBlocker.project, days: 0, status: 'open' });
       this.save('blockers');
       this.newBlocker = { title: '', waiting_on: 'Fahad', project: '' };
     },
     addStuckPr() {
-      this.stuckPrs.unshift({ id: Date.now(), pr_id: '', repo: '', days_stuck: 1, waiting_on: this.config.users.find(u => u.role === 'dev')?.displayName || '' });
+      // U09 FIX — prune any existing blank rows before adding, so repeated + clicks don't stockpile empties.
+      this.pruneBlankStuckPrs();
+      this.stuckPrs.unshift({ id: this.nextId(), pr_id: '', repo: '', days_stuck: 1, waiting_on: this.config.users.find(u => u.role === 'dev')?.displayName || '' });
       this.save('stuckPrs');
       this.$nextTick(() => { document.querySelector('[data-focus-stuck-pr]')?.focus(); });
+    },
+    pruneBlankStuckPrs() {
+      const before = this.stuckPrs.length;
+      this.stuckPrs = this.stuckPrs.filter(pr => (pr.pr_id || '').toString().trim() !== '');
+      if (this.stuckPrs.length !== before) this.save('stuckPrs');
     },
     addRegression() {
       // H5 FIX — default project to active project filter (or first project) so the project tag is always set on creation.
       const defaultProject = this.activeProject !== 'all'
         ? (this.config.projects.find(p => p.id === this.activeProject)?.name || '')
         : (this.config.projects[0]?.name || '');
-      this.regressionCandidates.unshift({ id: Date.now(), current: '', past: '', past_week: 1, status: 'open', project: defaultProject });
+      this.pruneBlankRegressions();
+      this.regressionCandidates.unshift({ id: this.nextId(), current: '', past: '', past_week: 1, status: 'open', project: defaultProject });
       this.save('regressionCandidates');
       this.$nextTick(() => { document.querySelector('[data-focus-regression]')?.focus(); });
+    },
+    pruneBlankRegressions() {
+      const before = this.regressionCandidates.length;
+      this.regressionCandidates = this.regressionCandidates.filter(r => (r.current || '').toString().trim() !== '');
+      if (this.regressionCandidates.length !== before) this.save('regressionCandidates');
     },
     // H5 FIX — scoped regression list. Untagged regressions show in "All projects" only.
     filteredRegressionCandidates() {
@@ -3975,9 +4041,20 @@ function devdash() {
           bug.disputed = false;
           bug.dispute_resolution = outcome;
           // I10 FIX — Accepted = dev was right, re-route to project owner instead of leaving ownerless
+          // U11 FIX — if the disputing dev IS the project owner, clearing to owner is a no-op.
+          // Unassign + alert PM so they pick the right re-triage target manually.
           if (outcome === 'accepted') {
-            bug.assigned_to = this.suggestDevForBug(bug.project);
-            bug.reassigned_reason = 'Dispute accepted on ' + new Date().toISOString().slice(0,10) + ' — routed back to project owner';
+            const suggested = this.suggestDevForBug(bug.project);
+            const project = this.config.projects.find(p => p.name === bug.project);
+            const ownerName = project && project.owner_email ? (this.config.users.find(u => u.email === project.owner_email)?.displayName || '') : '';
+            if (suggested === d.disputed_by || (ownerName && ownerName === d.disputed_by)) {
+              bug.assigned_to = '';
+              bug.reassigned_reason = 'Dispute accepted on ' + new Date().toISOString().slice(0,10) + ' — project owner was the disputer, PM must re-triage';
+              alert('Dispute accepted.\n\nThe disputing dev (' + d.disputed_by + ') is the project owner for "' + bug.project + '", so the bug can\'t auto-route back to them. It\'s now UNASSIGNED — pick a new owner from the bug queue dropdown.');
+            } else {
+              bug.assigned_to = suggested;
+              bug.reassigned_reason = 'Dispute accepted on ' + new Date().toISOString().slice(0,10) + ' — routed back to project owner';
+            }
           }
           this.save('bugs');
         }
@@ -4093,7 +4170,7 @@ function devdash() {
         this.save('rewardEvents');
       }
       // 8. Audit log + splice user
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Users', change: `Removed ${name} (${email}) — bugs/features/disputes/audits/blockers reconciled, pending rewards ${rule === 'forfeit' ? 'voided' : 'preserved'}` });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Users', change: `Removed ${name} (${email}) — bugs/features/disputes/audits/blockers reconciled, pending rewards ${rule === 'forfeit' ? 'voided' : 'preserved'}` });
       this.save('auditLog');
       this.config.users.splice(idx, 1);
       // Clear user-specific localStorage keys so they don't leak
@@ -4347,7 +4424,7 @@ function devdash() {
       for (const a of this.auditFindings) if (a.project === p.name) a.project = archivedLabel;
       for (const f of this.featureRequests) if (f.project === p.name) f.project = archivedLabel;
       this.save('bugs'); this.save('auditFindings'); this.save('featureRequests');
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Projects', change: `Removed project ${p.name} — archived ${bugsCount} bugs + ${auditsCount} audits + ${frCount} feature requests` });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Projects', change: `Removed project ${p.name} — archived ${bugsCount} bugs + ${auditsCount} audits + ${frCount} feature requests` });
       this.save('auditLog');
       this.config.projects.splice(idx, 1);
       this.saveConfig();
@@ -4393,7 +4470,7 @@ function devdash() {
       if (!this._guard('submitBug')) return;
       const dev = this.suggestDevForBug(this.newBug.project);
       this.bugs.unshift({
-        id: Date.now(),
+        id: this.nextId(),
         summary: this.newBug.summary,
         severity: this.newBug.severity,
         project: this.newBug.project,
@@ -4417,7 +4494,7 @@ function devdash() {
       const assignedTo = this.newAudit.assigned_to || (this.config.users.find(u => u.displayName === this.suggestDevForBug(this.newAudit.project))?.email || '');
       const cat = this.newAudit.category;
       this.auditFindings.unshift({
-        id: Date.now(),
+        id: this.nextId(),
         title: this.newAudit.title,
         project: this.newAudit.project,
         findings: this.newAudit.findings,
@@ -4495,7 +4572,11 @@ function devdash() {
       if (!this.currentUser) return;
       const u = this.config.users.find(x => x.email === this.currentUser.email);
       if (!u) return;
-      u.absence = { type, until: until || '', note: note || '' };
+      const next = { type, until: until || '', note: note || '' };
+      u.absence = next;
+      // U08 FIX — currentUser is a snapshot (see tryLogin: `{...this.selectedUser}`). Keep it
+      // in sync so any code path still reading currentUser.absence stays fresh until re-login.
+      if (this.currentUser) this.currentUser.absence = next;
       this.saveConfig();
     },
     logSickRetro(days) {
@@ -4508,7 +4589,7 @@ function devdash() {
       const sinceStr = since.toISOString().slice(0, 10);
       const todayStr = today.toISOString().slice(0, 10);
       // Push an audit log entry so PM/CEO see the retro log (not a live absence).
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T', ' ').slice(0, 16), who: u.displayName, section: 'Absence', change: 'Logged sick leave: ' + sinceStr + ' to ' + todayStr + ' (' + days + ' day' + (days === 1 ? '' : 's') + ')' });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T', ' ').slice(0, 16), who: u.displayName, section: 'Absence', change: 'Logged sick leave: ' + sinceStr + ' to ' + todayStr + ' (' + days + ' day' + (days === 1 ? '' : 's') + ')' });
       this.save('auditLog');
       // Clear any active absence — they're back.
       u.absence = { type: 'none', until: '', note: '', last_sick_log: { since: sinceStr, until: todayStr, days } };
@@ -4517,15 +4598,26 @@ function devdash() {
     },
     clearSelfAbsence() {
       const u = this.config.users.find(x => x.email === this.currentUser?.email);
-      if (u) { u.absence = { type: 'none', until: '', note: '' }; this.saveConfig(); }
+      if (u) {
+        const next = { type: 'none', until: '', note: '' };
+        u.absence = next;
+        if (this.currentUser) this.currentUser.absence = next;
+        this.saveConfig();
+      }
     },
     myAbsence() {
       return this.config.users.find(u => u.email === this.currentUser?.email)?.absence || { type: 'none' };
     },
     submitFeature() {
       if (!this._guard('submitFeature')) return;
+      // U10 FIX — reject empty / whitespace-only descriptions (the :disabled binding only catches '').
+      const desc = (this.newFeature.description || '').trim();
+      if (!desc) {
+        alert('Description required. Tell the assigned dev what you want built (one sentence is fine).');
+        return;
+      }
       const target = this.newFeature.target_dev === 'auto' ? this.suggestDevForBug(this.newFeature.project) : this.newFeature.target_dev;
-      this.featureRequests.unshift({ id: Date.now(), description: this.newFeature.description, urgency: this.newFeature.urgency, project: this.newFeature.project, requester: this.currentUser.displayName, target_dev: target, age_days: 0 });
+      this.featureRequests.unshift({ id: this.nextId(), description: desc, urgency: this.newFeature.urgency, project: this.newFeature.project, requester: this.currentUser.displayName, target_dev: target, age_days: 0 });
       this.save('featureRequests');
       this.newFeature = { project: 'Phonebot 2.0', description: '', urgency: 'medium', target_dev: 'auto' };
       this.showFeatureForm = false;
@@ -4546,14 +4638,14 @@ function devdash() {
       this.devMockData[email].off_project_note = this.newOffProject.description + ' (' + this.newOffProject.status + ')';
       // C2 FIX — persist devMockData so off-project hours survive reload
       this.save('devMockData');
-      this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Off-project', change: `Logged ${this.newOffProject.hours}h — ${this.newOffProject.description}` });
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Off-project', change: `Logged ${this.newOffProject.hours}h — ${this.newOffProject.description}` });
       this.save('auditLog');
       this.newOffProject = { description: '', hours: '', status: 'done' };
       this.showOffProjectForm = false;
     },
     submitPmAssessment() {
       if (!this._guard('submitPmAssessment')) return;
-      this.pmAssessments.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser.displayName, text: this.newPmAssessment, disagreement_flagged: this.newPmAssessment.length > 50 });
+      this.pmAssessments.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser.displayName, text: this.newPmAssessment, disagreement_flagged: this.newPmAssessment.length > 50 });
       this.save('pmAssessments');
       this.newPmAssessment = '';
       this.showPmAssessmentForm = false;
