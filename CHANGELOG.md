@@ -7,6 +7,84 @@ manual-QA script for the dashboard. Walk top-to-bottom on a fresh browser to reg
 
 ---
 
+## 2026-04-27 — iMac-local recovery: L14 + U02-U11 + L05/L16/L17 ports
+
+Office iMac was disconnected from git over the weekend. Sunday-morning fixes (user-clicks QA pass +
+infra hardening) were authored locally on it. Porting now on top of the weekend hardening pass.
+**U01** (owner dropdown) and **U05** (PM ⚖ chip) were already fixed differently/equivalently on
+remote and are intentionally NOT re-applied.
+
+### Infra (3 files)
+
+- **L05** `scripts/dashboard/git_sync.py` — tz-aware datetime via `zoneinfo` so "today" slug matches
+  the configured timezone (Melbourne / Karachi). Backward-compatible: only kicks in when config has
+  an explicit `timezone` field.
+  - **Test:** Set `timezone: Australia/Melbourne` in `dashboard.config.yaml` → run `git_sync.py`
+    near the UTC-Melbourne day boundary → commits attribute to the correct local-time day.
+- **L16** `worker/src/totp.ts` — correct base64url padding `(4 - len%4) % 4` in `decryptSecret`,
+  plus 28-byte minimum validation (12 nonce + 16 GCM tag), plus `userEmail` in error messages so
+  operator knows whose secret is corrupt.
+  - **Test:** Provision a user with TOTP, manually corrupt their secret in KV, attempt login →
+    error message names the user.
+- **L17** `worker/src/email.ts` — 10s `AbortController` timeout on MailChannels POST. New
+  `sendEmailWithRetry()` wrapper with exponential backoff (1s / 2s / 4s) + KV dead-letter queue
+  at `alerts:failed:<date>` for tomorrow's cron to retry.
+  - **Test:** Block MailChannels via firewall during a daily cron → check KV for
+    `alerts:failed:<today>` entry; next day's cron retries cleanly.
+
+### devdash.html
+
+- **L14** Monotonic `nextId()` counter (lazy-init from max-of-all-known-ids). Replaced 14 sites of
+  `id: Date.now()`. Avoids collisions during bursts even when `_guard` rate-limits.
+  - **Test:** Stress-add 5 stuck PRs in <1s → all 5 get unique ids in `localStorage.devdash_stuckPrs`.
+- **U02** CEO stat tiles pre-set filters before tab switch. "Open HIGH bugs → 2" now lands on QA
+  view with severity=HIGH + status=open applied (was: all 6 bugs visible). Same for audit-findings
+  tile. Feature + Stuck-PR tiles set `pmFocus` signal for future scroll-to.
+  - **Test:** CEO view → click "Open HIGH bugs" → QA view shows only HIGH+open bugs.
+- **U03** Blocker × confirm dialog shows title + id (`Delete this blocker?\n\n<title>\n\n(id #N)`)
+  so wrong-clicks are catchable. Handler was already id-based — defensive UX fix.
+  - **Test:** CEO Decisions modal → click × on R0-06 → confirm reads "...R0-06 secret rotation
+    approval...(id #1)".
+- **U04** `defaultTabFor(role)` helper maps role → own tab (qa → 'qa', qa_auditor → 'qa_auditor').
+  Called from `tryLogin()` + session-resume. Was using `visibleRoleTabs()[0]` which sent QA / QA
+  Auditor users to 'dev' tab on login.
+  - **Test:** Log in as Kinza (QA) → lands on QA tab. Log in as Mustafa (qa_auditor) → lands on
+    QA Auditor tab.
+- **U06** Audit status dropdown adds Resolved option (per-row + filter). Old
+  `status: "resolved"` audits silently rebound to "Open" because the option was missing.
+  - **Test:** Mustafa → QA Auditor → Past audit findings → status dropdown shows 4 options.
+- **U07** Theme localStorage load now tolerates both plain (`cream`) and JSON-encoded (`"cream"`)
+  formats. Strips quotes if present, validates against allowed list, re-writes as plain string so
+  future reads are clean. Density gets the same treatment.
+  - **Test:** Set `localStorage.devdash_theme = '"cream"'` (with quotes) via DevTools → reload →
+    page is in cream theme; localStorage value is now plain `cream`.
+- **U08** `markSelfAbsent` + `clearSelfAbsence` now also update `currentUser.absence` snapshot for
+  any direct readers (banner already used live `myAbsence()` so no immediate visual fix, but any
+  future code path reading `currentUser.absence` stays fresh until re-login).
+  - **Test:** Faizan → click 🤒 Sick today → banner updates immediately; `Alpine.$data(body).currentUser.absence` is fresh, not stale.
+- **U09** `pruneBlankStuckPrs()` + `pruneBlankRegressions()` run before each `+` click and on
+  `init()`. Blank rows no longer stockpile in localStorage.
+  - **Test:** Click `+ Log PR` 3 times without filling → reload → no blank rows persist.
+- **U10** `submitFeature()` trim+alert on empty / whitespace-only description. The `:disabled`
+  binding only caught true empty string.
+  - **Test:** Click "+ Feature request" → submit without typing → alert "Description required..."
+    fires; no feature added.
+- **U11** Dispute-accept owner edge — when disputing dev IS the project owner, clearing the
+  bug to "owner" was a no-op. Now unassigns + alerts PM to pick a new owner.
+  - **Test:** Faizan (owner of Phonebot 2.0) disputes a Phonebot 2.0 bug → PM accepts → alert
+    fires + bug.assigned_to = '' + reassigned_reason explains.
+
+### Docs
+
+- New `offboarding-runbook.md` — 10-step procedure (T-7d through post-departure verification),
+  cross-references `removeUser()`, TOTP revoke via wrangler, payout override flow, sandbox-test.
+- New `qa-sandbox-run/user-clicks-qa.md` — full user-clicks QA agent report with all 11 findings
+  (1 BLOCKER + 5 HIGH + 5 MEDIUM/LOW). Now archived as the source-of-truth for what these patches fix.
+
+pytest 58/58 still green. node --check on inline JS clean.
+
+---
+
 ## 2026-04-25/26 — Pre-AWS-launch hardening pass: persistence, reactivity, dead-settings wiring
 
 Single-file SPA (`devdash.html`) hardened for the AWS static deploy. Every config field in Settings
