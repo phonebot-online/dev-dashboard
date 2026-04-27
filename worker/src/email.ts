@@ -17,21 +17,72 @@ export async function sendEmail(payload: EmailPayload): Promise<void> {
   const from = payload.from || 'devdash@devdash.phonebot.co.uk';
   const fromName = payload.fromName || 'devdash';
 
-  const res = await fetch('https://api.mailchannels.net/tx/v1/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      personalizations: [{ to: [{ email: payload.to }] }],
-      from: { email: from, name: fromName },
-      subject: `[devdash] ${payload.subject}`,
-      content: [{ type: 'text/plain', value: payload.body }],
-    }),
-  });
+  // L17 FIX — add AbortController timeout so a hung MailChannels socket doesn't burn the Worker's 30s CPU budget.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`MailChannels send failed: ${res.status} ${errBody}`);
+  try {
+    const res = await fetch('https://api.mailchannels.net/tx/v1/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: payload.to }] }],
+        from: { email: from, name: fromName },
+        subject: `[devdash] ${payload.subject}`,
+        content: [{ type: 'text/plain', value: payload.body }],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`MailChannels send failed: ${res.status} ${errBody}`);
+    }
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') {
+      throw new Error(`MailChannels timed out after 10s — alert queued for retry`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
+
+/**
+ * L17 FIX — retry wrapper with KV-backed dead-letter queue. Call this from the scheduled()
+ * handler instead of sendEmail() directly. Failed alerts go to `alerts:failed:<date>` KV key
+ * so the next day's cron can retry without losing the notification.
+ */
+export async function sendEmailWithRetry(
+  payload: EmailPayload,
+  kv: KVNamespace,
+  opts: { maxRetries?: number; dateKey?: string } = {},
+): Promise<{ ok: boolean; attempts: number; error?: string }> {
+  const maxRetries = opts.maxRetries ?? 2;
+  const dateKey = opts.dateKey || new Date().toISOString().slice(0, 10);
+  let lastError: string | undefined;
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      await sendEmail(payload);
+      return { ok: true, attempts: i + 1 };
+    } catch (e) {
+      lastError = (e as Error).message;
+      if (i < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s
+        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, i)));
+      }
+    }
+  }
+  // All retries exhausted — write to dead-letter so tomorrow's cron retries
+  try {
+    const existingRaw = await kv.get(`alerts:failed:${dateKey}`);
+    const existing = existingRaw ? JSON.parse(existingRaw) : [];
+    existing.push({ payload, last_error: lastError, failed_at: new Date().toISOString() });
+    await kv.put(`alerts:failed:${dateKey}`, JSON.stringify(existing));
+  } catch (kvErr) {
+    console.error('dead-letter KV write failed', kvErr);
+  }
+  return { ok: false, attempts: maxRetries + 1, error: lastError };
 }
 
 /**
