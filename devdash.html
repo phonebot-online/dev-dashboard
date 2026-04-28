@@ -2653,6 +2653,222 @@
               </div>
             </div>
 
+            <!-- ============================ -->
+            <!-- SPRINTS (Scrum)              -->
+            <!-- ============================ -->
+            <div class="card p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex-1 min-w-0">
+                  <div class="text-[10px] uppercase tracking-wider" style="color: var(--text-muted)">Sprints <span x-show="(projectDetail().sprints || []).length" class="ml-1" style="color: var(--text-fade)">(<span x-text="(projectDetail().sprints || []).length"></span>)</span></div>
+                  <div class="text-[10px] mt-1" style="color: var(--text-fade)">Two-week iterations. Each sprint has a goal, dated timebox, and a backlog of tasks scored in story points.</div>
+                </div>
+                <button @click="addSprint(projectDetail())" class="primary text-xs flex-shrink-0">+ New sprint</button>
+              </div>
+              <template x-if="(projectDetail().sprints || []).length === 0">
+                <div class="text-xs italic" style="color: var(--text-fade)">No sprints yet. Click "+ New sprint" to start your first iteration.</div>
+              </template>
+              <div class="space-y-2">
+                <template x-for="(sp, spIdx) in (projectDetail().sprints || [])" :key="sp.id">
+                  <div class="rounded-lg" style="background: var(--bg-soft); border: 1px solid var(--border)">
+                    <!-- Sprint summary row -->
+                    <div class="p-3 cursor-pointer flex items-start justify-between gap-3" @click="sp._expanded = !sp._expanded">
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap mb-1">
+                          <span class="text-sm font-semibold" style="color: var(--text)" x-text="sp.name"></span>
+                          <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded" :style="`background: ${sprintStatusColor(sp.status).bg}; color: ${sprintStatusColor(sp.status).fg}`" x-text="sp.status"></span>
+                          <span class="text-[11px]" style="color: var(--text-fade)" x-text="sp.start_date + ' → ' + sp.end_date"></span>
+                        </div>
+                        <template x-if="sp.goal">
+                          <div class="text-xs italic mb-1.5" style="color: var(--text-muted)">🎯 <span x-text="sp.goal"></span></div>
+                        </template>
+                        <div class="flex items-center gap-3 text-[11px]" style="color: var(--text-fade)">
+                          <span><span x-text="(sp.tasks || []).length"></span> tasks</span>
+                          <span x-show="sprintPointsTotal(sp)"><span x-text="sprintPointsDone(sp)"></span> / <span x-text="sprintPointsTotal(sp)"></span> points</span>
+                          <div x-show="sprintPointsTotal(sp)" class="flex-1 max-w-[160px] h-1.5 rounded" style="background: var(--card-hover)">
+                            <div class="h-full rounded" :style="`width: ${sprintProgressPct(sp)}%; background: var(--accent)`"></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2 flex-shrink-0">
+                        <span class="text-xs" style="color: var(--text-fade)" x-text="sp._expanded ? '▾' : '▸'"></span>
+                        <button @click.stop="removeSprint(projectDetail(), spIdx)" class="danger" title="Delete sprint">×</button>
+                      </div>
+                    </div>
+                    <!-- Sprint expanded -->
+                    <div x-show="sp._expanded" class="px-3 pb-3 pt-1 space-y-3" style="border-top: 1px solid var(--divider)">
+                      <!-- Editable header fields -->
+                      <div class="grid md:grid-cols-4 gap-2">
+                        <div class="md:col-span-2">
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Sprint name</label>
+                          <input :value="sp.name" @input="sp.name = $event.target.value; saveConfig()" class="!py-1.5 !text-sm">
+                        </div>
+                        <div>
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Status</label>
+                          <select :value="sp.status" @change="sp.status = $event.target.value; saveConfig()" class="!py-1.5 !text-sm">
+                            <option value="planning">Planning</option>
+                            <option value="active">Active</option>
+                            <option value="review">Review</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </div>
+                        <div></div>
+                        <div>
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Start date</label>
+                          <input type="date" :value="sp.start_date" @change="sp.start_date = $event.target.value; saveConfig()" class="!py-1.5 !text-sm">
+                        </div>
+                        <div>
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">End date</label>
+                          <input type="date" :value="sp.end_date" @change="sp.end_date = $event.target.value; saveConfig()" class="!py-1.5 !text-sm">
+                        </div>
+                        <div class="md:col-span-2">
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Sprint goal</label>
+                          <input :value="sp.goal" @input="sp.goal = $event.target.value; saveConfig()" placeholder="e.g. Ship checkout v2 to staging" class="!py-1.5 !text-sm">
+                        </div>
+                      </div>
+                      <!-- Tasks -->
+                      <div>
+                        <div class="flex items-center justify-between mb-2">
+                          <div class="text-[10px] uppercase tracking-wider" style="color: var(--text-muted)">Tasks</div>
+                          <button @click="addSprintTask(sp)" class="secondary text-xs">+ Add task</button>
+                        </div>
+                        <template x-if="(sp.tasks || []).length === 0">
+                          <div class="text-xs italic" style="color: var(--text-fade)">No tasks. Click "+ Add task" to break the sprint goal into work items.</div>
+                        </template>
+                        <div class="space-y-1.5">
+                          <template x-for="(tk, tkIdx) in (sp.tasks || [])" :key="tk.id">
+                            <div class="grid grid-cols-12 gap-2 items-center p-2 rounded" style="background: var(--card-hover)">
+                              <input :value="tk.title" @input="tk.title = $event.target.value; saveConfig()" placeholder="Task title" class="col-span-12 md:col-span-4 !py-1 !text-sm">
+                              <select x-model="tk.assignee_email" @change="saveConfig()" class="col-span-6 md:col-span-3 !py-1 !text-xs">
+                                <option value="">Unassigned</option>
+                                <template x-for="u in config.users.filter(x => x.role === 'dev' && x.status === 'active')" :key="u.email">
+                                  <option :value="u.email" x-text="u.displayName"></option>
+                                </template>
+                              </select>
+                              <select :value="tk.priority" @change="tk.priority = $event.target.value; saveConfig()" class="col-span-3 md:col-span-2 !py-1 !text-xs">
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                              </select>
+                              <input type="number" min="0" :value="tk.story_points" @input="tk.story_points = Number($event.target.value); saveConfig()" placeholder="Pts" class="col-span-3 md:col-span-1 !py-1 !text-xs text-center" title="Story points">
+                              <select :value="tk.status" @change="tk.status = $event.target.value; saveConfig()" class="col-span-9 md:col-span-1 !py-1 !text-xs">
+                                <option value="todo">To-do</option>
+                                <option value="in_progress">In progress</option>
+                                <option value="in_review">In review</option>
+                                <option value="done">Done</option>
+                              </select>
+                              <button @click="removeSprintTask(sp, tkIdx)" class="danger col-span-3 md:col-span-1" title="Remove task">×</button>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- ============================ -->
+            <!-- BUILDS / RELEASES (SDLC)     -->
+            <!-- ============================ -->
+            <div class="card p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex-1 min-w-0">
+                  <div class="text-[10px] uppercase tracking-wider" style="color: var(--text-muted)">Builds &amp; releases <span x-show="(projectDetail().builds || []).length" class="ml-1" style="color: var(--text-fade)">(<span x-text="(projectDetail().builds || []).length"></span>)</span></div>
+                  <div class="text-[10px] mt-1" style="color: var(--text-fade)">Versioned releases targeting an environment. Track what shipped, when, from which branch, and against which sprint.</div>
+                </div>
+                <button @click="addBuild(projectDetail())" class="primary text-xs flex-shrink-0">+ New build</button>
+              </div>
+              <template x-if="(projectDetail().builds || []).length === 0">
+                <div class="text-xs italic" style="color: var(--text-fade)">No builds yet. Click "+ New build" to record a release.</div>
+              </template>
+              <div class="space-y-2">
+                <template x-for="(bd, bdIdx) in (projectDetail().builds || [])" :key="bd.id">
+                  <div class="rounded-lg" style="background: var(--bg-soft); border: 1px solid var(--border)">
+                    <!-- Build summary row -->
+                    <div class="p-3 cursor-pointer flex items-start justify-between gap-3" @click="bd._expanded = !bd._expanded">
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap mb-1">
+                          <span class="text-sm font-mono font-semibold" style="color: var(--text)">v<span x-text="bd.version"></span></span>
+                          <template x-if="bd.name"><span class="text-sm" style="color: var(--text-muted)" x-text="'· ' + bd.name"></span></template>
+                          <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded" :style="`background: ${buildEnvColor(bd.environment).bg}; color: ${buildEnvColor(bd.environment).fg}`" x-text="bd.environment"></span>
+                          <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded" :style="`background: ${buildStatusColor(bd.status).bg}; color: ${buildStatusColor(bd.status).fg}`" x-text="(bd.status || '').replace('_', ' ')"></span>
+                        </div>
+                        <div class="flex items-center gap-3 text-[11px] flex-wrap" style="color: var(--text-fade)">
+                          <span x-show="bd.release_date">📅 <span x-text="bd.release_date"></span></span>
+                          <span x-show="bd.branch">🌿 <span class="font-mono" x-text="bd.branch"></span></span>
+                          <template x-if="buildSprintIds(bd).length">
+                            <span>🏃 <span x-text="buildSprintNames(bd, projectDetail())"></span></span>
+                          </template>
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2 flex-shrink-0">
+                        <span class="text-xs" style="color: var(--text-fade)" x-text="bd._expanded ? '▾' : '▸'"></span>
+                        <button @click.stop="removeBuild(projectDetail(), bdIdx)" class="danger" title="Delete build">×</button>
+                      </div>
+                    </div>
+                    <!-- Build expanded -->
+                    <div x-show="bd._expanded" class="px-3 pb-3 pt-1 space-y-3" style="border-top: 1px solid var(--divider)">
+                      <div class="grid md:grid-cols-4 gap-2">
+                        <div>
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Version</label>
+                          <input :value="bd.version" @input="bd.version = $event.target.value; saveConfig()" placeholder="1.2.0" class="!py-1.5 !text-sm font-mono">
+                        </div>
+                        <div class="md:col-span-3">
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Build name (optional)</label>
+                          <input :value="bd.name" @input="bd.name = $event.target.value; saveConfig()" placeholder="e.g. Checkout hotfix" class="!py-1.5 !text-sm">
+                        </div>
+                        <div>
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Environment</label>
+                          <select :value="bd.environment" @change="bd.environment = $event.target.value; saveConfig()" class="!py-1.5 !text-sm">
+                            <option value="dev">Dev</option>
+                            <option value="staging">Staging</option>
+                            <option value="production">Production</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Status</label>
+                          <select :value="bd.status" @change="bd.status = $event.target.value; saveConfig()" class="!py-1.5 !text-sm">
+                            <option value="planning">Planning</option>
+                            <option value="in_progress">In progress</option>
+                            <option value="released">Released</option>
+                            <option value="failed">Failed</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Release date</label>
+                          <input type="date" :value="bd.release_date" @change="bd.release_date = $event.target.value; saveConfig()" class="!py-1.5 !text-sm">
+                        </div>
+                        <div>
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Branch / tag</label>
+                          <input :value="bd.branch" @input="bd.branch = $event.target.value; saveConfig()" placeholder="main" class="!py-1.5 !text-sm font-mono">
+                        </div>
+                        <div class="md:col-span-4">
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Related sprints <span class="normal-case tracking-normal" style="color: var(--text-fade)">— tick all that apply</span></label>
+                          <template x-if="(projectDetail().sprints || []).length === 0">
+                            <div class="text-xs italic" style="color: var(--text-fade)">No sprints yet. Create a sprint above to link it to this build.</div>
+                          </template>
+                          <div class="flex flex-wrap gap-2">
+                            <template x-for="s in (projectDetail().sprints || [])" :key="s.id">
+                              <label class="flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer" :style="buildSprintIds(bd).includes(s.id) ? `background: var(--accent-dim); border: 1px solid var(--accent); color: var(--accent)` : `background: var(--card-hover); border: 1px solid var(--border); color: var(--text-muted)`">
+                                <input type="checkbox" class="!w-auto !p-0 !m-0" :checked="buildSprintIds(bd).includes(s.id)" @change="toggleBuildSprint(bd, s.id)">
+                                <span x-text="s.name"></span>
+                                <span class="text-[10px]" style="color: var(--text-fade)" x-text="'(' + s.status + ')'"></span>
+                              </label>
+                            </template>
+                          </div>
+                        </div>
+                        <div class="md:col-span-4">
+                          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Release notes</label>
+                          <textarea :value="bd.release_notes" @input="bd.release_notes = $event.target.value; saveConfig()" rows="3" placeholder="What's in this build? Bug fixes, features, breaking changes..." class="!text-sm"></textarea>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
             <!-- Readiness checklist (ticking always works; +/edit only in edit mode) -->
             <div class="card p-4">
               <div class="flex items-center justify-between mb-3">
@@ -4753,6 +4969,130 @@ function devdash() {
     removePhase(project, idx) { project.phases.splice(idx, 1); project.phases = [...project.phases]; },
     addLink(project) { project.links = [...(project.links || []), { id: this.nextId(), label: 'New link', url: '' }]; },
     removeLink(project, idx) { project.links.splice(idx, 1); project.links = [...project.links]; },
+
+    // ---------- Sprints (Scrum) ----------
+    addSprint(project) {
+      const today = new Date();
+      const twoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+      const fmt = d => d.toISOString().slice(0, 10);
+      project.sprints = [...(project.sprints || []), {
+        id: this.nextId(),
+        name: 'Sprint ' + ((project.sprints || []).length + 1),
+        goal: '',
+        start_date: fmt(today),
+        end_date: fmt(twoWeeks),
+        status: 'planning',
+        tasks: [],
+        _expanded: true,
+      }];
+      this.saveConfig();
+    },
+    removeSprint(project, idx) {
+      if (!confirm('Delete this sprint and all its tasks?')) return;
+      project.sprints.splice(idx, 1);
+      project.sprints = [...project.sprints];
+      this.saveConfig();
+    },
+    addSprintTask(sprint) {
+      sprint.tasks = [...(sprint.tasks || []), {
+        id: this.nextId(),
+        title: 'New task',
+        assignee_email: '',
+        story_points: 1,
+        status: 'todo',
+        priority: 'medium',
+      }];
+      this.saveConfig();
+    },
+    removeSprintTask(sprint, idx) {
+      sprint.tasks.splice(idx, 1);
+      sprint.tasks = [...sprint.tasks];
+      this.saveConfig();
+    },
+    sprintPointsTotal(sprint) { return (sprint.tasks || []).reduce((s, t) => s + (Number(t.story_points) || 0), 0); },
+    sprintPointsDone(sprint)  { return (sprint.tasks || []).filter(t => t.status === 'done').reduce((s, t) => s + (Number(t.story_points) || 0), 0); },
+    sprintProgressPct(sprint) {
+      const total = this.sprintPointsTotal(sprint);
+      if (!total) return 0;
+      return Math.round((this.sprintPointsDone(sprint) / total) * 100);
+    },
+    sprintStatusColor(status) {
+      return ({
+        planning:  { bg: 'rgba(156,163,175,0.15)', fg: '#9ca3af' },
+        active:    { bg: 'rgba(74,222,128,0.15)',  fg: '#4ade80' },
+        review:    { bg: 'rgba(96,165,250,0.15)',  fg: '#60a5fa' },
+        completed: { bg: 'rgba(168,85,247,0.15)',  fg: '#a855f7' },
+        cancelled: { bg: 'rgba(248,113,113,0.15)', fg: '#f87171' },
+      }[status] || { bg: 'rgba(156,163,175,0.15)', fg: '#9ca3af' });
+    },
+
+    // ---------- Builds (SDLC releases) ----------
+    addBuild(project) {
+      const today = new Date().toISOString().slice(0, 10);
+      const nextVersion = this._suggestNextVersion(project);
+      project.builds = [...(project.builds || []), {
+        id: this.nextId(),
+        version: nextVersion,
+        name: '',
+        environment: 'dev',
+        status: 'planning',
+        release_date: today,
+        release_notes: '',
+        branch: 'main',
+        related_sprint_ids: [],
+        _expanded: true,
+      }];
+      this.saveConfig();
+    },
+    removeBuild(project, idx) {
+      if (!confirm('Delete this build?')) return;
+      project.builds.splice(idx, 1);
+      project.builds = [...project.builds];
+      this.saveConfig();
+    },
+    _suggestNextVersion(project) {
+      const builds = project.builds || [];
+      if (!builds.length) return '0.1.0';
+      const last = builds[builds.length - 1].version || '0.0.0';
+      const m = String(last).match(/^(\d+)\.(\d+)\.(\d+)/);
+      if (!m) return '0.1.0';
+      return `${m[1]}.${Number(m[2]) + 1}.0`;
+    },
+    buildStatusColor(status) {
+      return ({
+        planning:    { bg: 'rgba(156,163,175,0.15)', fg: '#9ca3af' },
+        in_progress: { bg: 'rgba(255,170,0,0.15)',   fg: '#ffaa00' },
+        released:    { bg: 'rgba(74,222,128,0.15)',  fg: '#4ade80' },
+        failed:      { bg: 'rgba(248,113,113,0.15)', fg: '#f87171' },
+      }[status] || { bg: 'rgba(156,163,175,0.15)', fg: '#9ca3af' });
+    },
+    buildSprintIds(build) {
+      // Normalises legacy singular `related_sprint_id` into the array form so old builds keep working.
+      if (Array.isArray(build.related_sprint_ids)) return build.related_sprint_ids;
+      if (build.related_sprint_id != null) return [build.related_sprint_id];
+      return [];
+    },
+    toggleBuildSprint(build, sprintId) {
+      const ids = this.buildSprintIds(build).slice();
+      const i = ids.indexOf(sprintId);
+      if (i === -1) ids.push(sprintId); else ids.splice(i, 1);
+      build.related_sprint_ids = ids;
+      delete build.related_sprint_id; // migrate away from the legacy field
+      this.saveConfig();
+    },
+    buildSprintNames(build, project) {
+      const ids = this.buildSprintIds(build);
+      if (!ids.length) return '';
+      const sprints = project.sprints || [];
+      return ids.map(id => (sprints.find(s => s.id === id) || {}).name || '—').join(', ');
+    },
+    buildEnvColor(env) {
+      return ({
+        dev:        { bg: 'rgba(96,165,250,0.15)',  fg: '#60a5fa' },
+        staging:    { bg: 'rgba(255,170,0,0.15)',   fg: '#ffaa00' },
+        production: { bg: 'rgba(74,222,128,0.15)',  fg: '#4ade80' },
+      }[env] || { bg: 'rgba(156,163,175,0.15)', fg: '#9ca3af' });
+    },
     readinessPct(project) {
       const r = project.readiness || [];
       if (!r.length) return 0;
