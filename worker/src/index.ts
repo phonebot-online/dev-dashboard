@@ -4,6 +4,12 @@ import { sendEmail, formatAlertEmail, AlertSnapshot } from './email';
 export interface Env {
   DASHBOARD_KV: KVNamespace;
   TOTP_ENCRYPTION_KEY: string;
+  // Optional. When unset, /bitbucket/webhook returns 404 and /live is hidden.
+  // Set via: wrangler secret put WEBHOOK_SECRET
+  WEBHOOK_SECRET?: string;
+  // "clone" | "webhook" | "both". Defaults to "clone" when unset.
+  // Set via: wrangler secret put LIVE_FEED_MODE
+  LIVE_FEED_MODE?: string;
 }
 
 export default {

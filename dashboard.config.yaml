@@ -3,6 +3,23 @@ uploads_repo_path: /Users/adminadmin/Downloads/phonebot revamp/dev dashboard/dev
 fahad_email: fahad@phonebot.com.au
 domain: devdash.phonebot.co.uk
 
+# Live activity feed (Bitbucket webhook + /live page on the worker).
+# This block is INFORMATIONAL — the worker reads the actual mode from a
+# wrangler secret (LIVE_FEED_MODE), not from this file. Keep this in sync.
+#
+#   mode: clone    → worker rejects webhooks, /live returns 404 (default).
+#   mode: webhook  → worker accepts webhooks, /live exposed. No clone audit.
+#   mode: both     → worker accepts webhooks, /live exposed, clone audit also runs.
+#
+# Setup (worker side, one-time):
+#   wrangler secret put WEBHOOK_SECRET     # any random string; share with Bitbucket
+#   wrangler secret put LIVE_FEED_MODE     # value: clone | webhook | both
+# Setup (Bitbucket side, per-repo):
+#   Settings → Webhooks → Add → URL: https://<your-domain>/bitbucket/webhook
+#   Trigger: Repository push. Secret: same value as WEBHOOK_SECRET above.
+live_feed:
+  mode: clone
+
 projects:
   - name: "Phonebot 2.0"
     kickoff_date: "2026-04-01"
