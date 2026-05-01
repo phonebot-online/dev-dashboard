@@ -1,16 +1,29 @@
 name = "devdash"
 main = "src/index.ts"
 compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
 
-# Replace <FILL_AFTER_KV_CREATE> with the id returned from:
-#   wrangler kv:namespace create DASHBOARD_KV
+# Serve on the free workers.dev subdomain (e.g. devdash.<account>.workers.dev).
+# Flip this to false and uncomment the [[routes]] block below once you have
+# access to the phonebot.co.uk zone.
+workers_dev = true
+
+# Bundle devdash.html (one level up) as a text import so routes.ts can inject
+# the authenticated session and serve it as the SPA shell.
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
 [[kv_namespaces]]
 binding = "DASHBOARD_KV"
-id = "<FILL_AFTER_KV_CREATE>"
+id = "e5195c92099746d097c0b98caa81e9ef"
 
-[[routes]]
-pattern = "devdash.phonebot.co.uk/*"
-zone_name = "phonebot.co.uk"
+# Custom-domain route — re-enable once phonebot.co.uk DNS access is available
+# and set workers_dev = false above.
+# [[routes]]
+# pattern = "devdash.phonebot.co.uk/*"
+# zone_name = "phonebot.co.uk"
 
 # Daily cron at 13:00 UTC (~midnight AWST / 6am PKT / 11pm UK the day before)
 [triggers]

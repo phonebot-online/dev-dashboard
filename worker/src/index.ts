@@ -4,6 +4,7 @@ import { sendEmail, formatAlertEmail, AlertSnapshot } from './email';
 export interface Env {
   DASHBOARD_KV: KVNamespace;
   TOTP_ENCRYPTION_KEY: string;
+  BITBUCKET_WEBHOOK_SECRET: string;
 }
 
 export default {

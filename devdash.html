@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>devdash — Phonebot</title>
+<title>Phonebot — Dev Dashboard</title>
+<!--SESSION_INJECT-->
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
 <style>
@@ -256,8 +257,6 @@
           <div class="flex gap-3"><span class="text-amber-400 font-semibold">3.</span> Point camera at the QR above</div>
           <div class="flex gap-3"><span class="text-amber-400 font-semibold">4.</span> Tap "I've scanned it"</div>
         </div>
-        <!-- HONESTY FIX — TOTP enrolment is decorative in the static SPA build. Any 6-digit code logs you in until the backend lands. -->
-        <div class="text-[10px] mb-4 px-3 py-2 rounded text-left max-w-sm mx-auto" style="background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); color: #60a5fa">⚠ Internal tool — TOTP scan is decorative until the AWS backend lands. Any 6-digit code will let you in. Don't share this URL outside the team.</div>
         <button @click="loginStep='code'" class="primary w-full">I've scanned it</button>
         <button @click="loginStep='pick'; selectedUser=null" class="text-xs text-gray-500 hover:text-gray-300 mt-3">← Back</button>
       </div>
@@ -737,6 +736,23 @@
                 </div>
               </div>
               <div class="text-sm text-gray-300 mb-3 leading-relaxed" x-text="dev.summary"></div>
+              <template x-if="latestHandoffFor(dev.email)">
+                <div class="card p-2.5 mb-3 text-[11px]" style="background: rgba(255,170,0,0.06); border: 1px solid rgba(255,170,0,0.18); cursor: default" @click.stop>
+                  <div class="flex items-center justify-between mb-1">
+                    <div class="text-[10px] uppercase tracking-widest" style="color: #ffaa00">Latest handoff</div>
+                    <div class="text-[10px] text-gray-500" x-text="latestHandoffFor(dev.email).date"></div>
+                  </div>
+                  <template x-if="latestHandoffFor(dev.email).closed?.length">
+                    <div class="text-gray-300"><span class="text-gray-500">Closed:</span> <span x-text="latestHandoffFor(dev.email).closed.join(', ')"></span></div>
+                  </template>
+                  <template x-if="latestHandoffFor(dev.email).in_progress">
+                    <div class="text-gray-400"><span class="text-gray-500">In progress:</span> <span x-text="latestHandoffFor(dev.email).in_progress"></span></div>
+                  </template>
+                  <template x-if="latestHandoffFor(dev.email).open">
+                    <div class="text-gray-400"><span class="text-gray-500">Open:</span> <span x-text="latestHandoffFor(dev.email).open"></span></div>
+                  </template>
+                </div>
+              </template>
               <div class="flex items-center justify-between text-[11px] text-gray-500">
                 <span>Off-project: <span class="text-amber-400 font-medium" x-text="dev.off_project_hours + 'h'"></span>
                   · Handoff: <span :class="dev.handoff_mult >= 0.95 ? 'text-emerald-400' : 'text-amber-400'" x-text="Math.round(dev.handoff_mult * 100) + '%'"></span>
@@ -1294,9 +1310,9 @@
           <!-- Commits + Queue -->
           <div class="grid md:grid-cols-2 gap-4">
             <div class="card p-5">
-              <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Your commits this week · <span x-text="devViewTarget().commits.length"></span></div>
+              <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Your commits this week · <span x-text="displayCommitsFor(devViewTarget().email).length"></span></div>
               <div class="space-y-3">
-                <template x-for="c in devViewTarget().commits" :key="c.sha">
+                <template x-for="c in displayCommitsFor(devViewTarget().email)" :key="c.sha">
                   <div class="border-b border-white/5 pb-3 last:border-0 last:pb-0">
                     <div class="flex items-center justify-between mb-1">
                       <div class="font-mono text-[10px] text-gray-500" x-text="c.sha.substring(0,7)"></div>
@@ -1313,7 +1329,10 @@
             <div class="card p-5">
               <div class="flex items-center justify-between mb-3">
                 <div class="text-xs uppercase tracking-wider text-gray-400">Your queue next week</div>
-                <button @click="showOffProjectForm = true" class="secondary text-[10px]">+ Log off-project</button>
+                <div class="flex items-center gap-2">
+                  <button x-show="isViewingSelf(devViewTarget())" @click="openHandoffForm()" class="primary text-[10px]" title="Log what you closed / in progress / open today">📝 Log my day</button>
+                  <button @click="showOffProjectForm = true" class="secondary text-[10px]">+ Log off-project</button>
+                </div>
               </div>
               <div class="space-y-2">
                 <template x-for="q in devViewTarget().queue" :key="q.id">
@@ -2209,6 +2228,52 @@
       </div>
     </div>
   </div>
+  <!-- Log-my-day handoff modal — devs record what they closed / in-progress / open / off-project for today.
+       Schema matches scripts/dashboard/handoff_parser.py so the existing pipeline can consume these later. -->
+  <div x-show="showHandoffForm" @click.self="showHandoffForm = false" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" x-cloak>
+    <div class="glass rounded-xl p-6 w-full max-w-xl fade-in">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <div class="text-lg text-white font-semibold">📝 Log my day</div>
+          <div class="text-[11px] text-gray-500" x-text="todayLong()"></div>
+        </div>
+        <button @click="showHandoffForm = false" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+      <p class="text-xs text-gray-400 mb-4">A 60-second end-of-day note. Visible to PM + CEO immediately. Use ticket IDs (P0-13, R0-09) where possible — easier to grep later.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Project</label>
+          <select x-model="handoffDraft.project">
+            <template x-for="p in (config.projects || [])" :key="p.name"><option :value="p.name" x-text="p.name"></option></template>
+          </select>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Closed today</label>
+          <input x-model="handoffDraft.closed" placeholder="P0-13, R0-09 (comma-separated, or 'none')">
+        </div>
+        <div>
+          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">In progress</label>
+          <textarea x-model="handoffDraft.in_progress" rows="2" placeholder="Payment validation across 4 gateways — 70% done"></textarea>
+        </div>
+        <div>
+          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Open / blocked</label>
+          <textarea x-model="handoffDraft.open" rows="2" placeholder="Zip webhook signature — waiting on test creds from Imran"></textarea>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-2">
+            <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Off-project (optional)</label>
+            <input x-model="handoffDraft.off_project" placeholder="Legacy DNS rescue">
+          </div>
+          <div>
+            <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Hours</label>
+            <input x-model="handoffDraft.off_project_hours" type="number" step="0.5" min="0">
+          </div>
+        </div>
+      </div>
+      <button @click="submitHandoff()" class="primary w-full mt-4">Save handoff</button>
+    </div>
+  </div>
+
   <!-- Dispute modal -->
   <div x-show="showDisputeForm" @click.self="showDisputeForm = false" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" x-cloak>
     <div class="glass rounded-xl p-6 w-full max-w-lg fade-in">
@@ -2710,6 +2775,10 @@ function devdash() {
     currentUser: null, selectedUser: null, loginStep: 'pick', codeInput: '', loginError: '',
     activeRoleTab: 'ceo', activeProject: 'all', activeSettingsTab: 'Projects',
     devViewSelected: null, showFeatureForm: false, showOffProjectForm: false, showPmAssessmentForm: false,
+    showHandoffForm: false,
+    handoffs: [], // [{id, dev_email, date, project, closed[], in_progress, open, off_project, off_project_hours, created_at}]
+    handoffDraft: { project: '', closed: '', in_progress: '', open: '', off_project: '', off_project_hours: 0 },
+    commits: [], // CanonicalCommit[] — populated by /api/bitbucket-hook via /api/state. NEVER written from the SPA.
     pendingQrEmail: '',
     showProjectDetail: false, activeProjectDetailId: null, projectDetailEdit: false,
     showDecisionsModal: false, newBlocker: { title: '', waiting_on: 'Fahad', project: '' },
@@ -2787,122 +2856,7 @@ function devdash() {
         { email: 'mustafa@phonebot.com.au', displayName: 'Mustafa', role: 'qa_auditor', hours_per_week: 20, status: 'active' },
         { email: 'qa@phonebot.com.au', displayName: 'QA', role: 'qa', hours_per_week: 40, status: 'active' },
       ],
-      projects: [
-        { id: 'pb2', name: 'Phonebot 2.0', owner_email: 'faizan@phonebot.com.au', contributor_emails: [], kickoff: '2026-04-01', deadline: '2026-07-30', status: 'active', sync_cadence: 'daily', repos: ['/pb-backend','/pb-frontend'], traffic_light: 'yellow', percent_complete: 42, days_remaining: 98, days_of_work_required: 112, forecast_launch: 'Aug 14, 2026', summary: 'Laravel + Next.js rewrite. Payments live. SEO + QA pending.',
-          scope_in: 'Parity with OpenCart 1.0 on: checkout (all 4 gateways), customer account, order management, admin back-office, product catalog, CMS pages, search. HMAC auth on order-status. Throttling on verifyCustomerOrder + trackOrder. Order confirmation email rebuilt.',
-          scope_out: 'New features beyond 1.0. Mobile app (separate project). PPR variant selector (separate project). Any non-AU market support. WordPress migration of blog.',
-          phases: [
-            { name: 'Foundation (Laravel + Next.js scaffold)', status: 'done', percent: 100 },
-            { name: 'Payments + checkout parity', status: 'done', percent: 100 },
-            { name: 'Customer account + orders', status: 'active', percent: 70 },
-            { name: 'Admin back-office', status: 'active', percent: 35 },
-            { name: 'SEO + redirects + 301 map', status: 'planned', percent: 10 },
-            { name: 'QA + parity audit', status: 'planned', percent: 5 },
-            { name: 'Cutover + DNS flip', status: 'planned', percent: 0 },
-          ],
-          readiness: [
-            { item: 'All 4 payment gateways live in staging', done: true },
-            { item: 'Payment amount validation (P0-13)', done: false },
-            { item: 'Zip webhook signature validation (P0-15)', done: false },
-            { item: 'env() → config() sweep (R0-07)', done: false },
-            { item: 'Admin back-office feature parity', done: false },
-            { item: 'Full SEO redirect map verified', done: false },
-            { item: '113 parity gaps from backend audit triaged', done: false },
-            { item: 'QA sign-off on checkout + account flows', done: false },
-            { item: 'DNS cutover dry-run completed', done: false },
-            { item: 'Rollback plan documented + tested', done: false },
-          ],
-          risks: [
-            'Legacy data migration — customer passwords, order history, loyalty balances.',
-            'SEO ranking drop during cutover if redirect map incomplete.',
-            'Payment gateway keys still on sandbox endpoints in some places.',
-            'Hardcoded keys in GoogleCyberController.',
-            'Aug 14 forecast slips past Jul 30 deadline — 15 days late.',
-          ],
-          links: [
-            { label: 'Backend audit (113 parity gaps)', url: '/docs/backend-audit.md' },
-            { label: 'Security brief', url: '/docs/security-brief.md' },
-            { label: 'Launch-readiness dashboard', url: '/launch-readiness-dashboard.html' },
-          ],
-        },
-        { id: 'hq', name: 'Phonebot HQ', owner_email: 'moazzam@phonebot.com.au', contributor_emails: ['faizan@phonebot.com.au'], kickoff: '2026-04-15', deadline: '2026-05-20', status: 'active', sync_cadence: 'weekly', repos: ['/phonebot-hq'], traffic_light: 'green', percent_complete: 58, days_remaining: 27, days_of_work_required: 25, forecast_launch: 'May 18, 2026', summary: 'Ops platform for 42 staff. WhatsApp live. Dashboard 80% done.',
-          scope_in: 'Next.js + Postgres ops platform for 42-staff team. Staff roster, roles, WhatsApp conversation panel, daily brief email, customer lookup, order-status tracker, internal dashboards.',
-          scope_out: 'Public-facing features. Dev evaluation (that\'s devdash). Payroll / HR (separate).',
-          phases: [
-            { name: 'Schema + auth', status: 'done', percent: 100 },
-            { name: 'Staff roster + filters', status: 'done', percent: 100 },
-            { name: 'WhatsApp integration + throttling', status: 'active', percent: 80 },
-            { name: 'Daily brief email', status: 'active', percent: 40 },
-            { name: 'Polish + training', status: 'planned', percent: 10 },
-          ],
-          readiness: [
-            { item: 'WhatsApp webhook rate-limiting stable', done: true },
-            { item: 'Staff roster + filter by market', done: true },
-            { item: 'Daily brief template approved', done: false },
-            { item: 'Conversation panel polished', done: false },
-            { item: 'Staff onboarding doc', done: false },
-          ],
-          risks: ['WhatsApp API rate limits at scale.', 'Staff training on new UI.'],
-          links: [],
-        },
-        { id: 'ppr', name: 'Product Page Revamp', owner_email: 'faisal@phonebot.com.au', contributor_emails: [], kickoff: '2026-04-01', deadline: '2026-06-15', status: 'active', sync_cadence: 'weekly', repos: ['/ppr'], traffic_light: 'green', percent_complete: 71, days_remaining: 52, days_of_work_required: 30, forecast_launch: 'Jun 12, 2026', summary: 'UI refresh of PDP. A/B framework in.',
-          scope_in: 'PDP visual refresh: hero, variant selector, trust badges, sticky Add-to-Cart on mobile. A/B testing framework for future experiments.',
-          scope_out: 'PLP changes. Cart / checkout changes. PDP content (copy).',
-          phases: [
-            { name: 'Design system tokens', status: 'done', percent: 100 },
-            { name: 'Variant selector refactor', status: 'done', percent: 100 },
-            { name: 'A/B framework', status: 'active', percent: 85 },
-            { name: 'Mobile polish + iOS Safari regression', status: 'active', percent: 50 },
-            { name: 'Launch + measure', status: 'planned', percent: 0 },
-          ],
-          readiness: [
-            { item: 'Variant selector on all product types', done: true },
-            { item: 'A/B bucket assignment stable', done: true },
-            { item: 'iOS Safari regression fixed', done: false },
-            { item: 'Analytics events firing', done: false },
-            { item: 'Rollout plan (% traffic ramp)', done: false },
-          ],
-          risks: ['iOS Safari regression keeps reappearing.', 'A/B sample size for low-traffic categories.'],
-          links: [],
-        },
-        { id: 'mob', name: 'Mobile App MVP', owner_email: 'usama@phonebot.com.au', contributor_emails: ['faizan@phonebot.com.au'], kickoff: '2026-04-01', deadline: '2026-09-30', status: 'active', sync_cadence: 'weekly', repos: ['/mobile-app'], traffic_light: 'yellow', percent_complete: 22, days_remaining: 158, days_of_work_required: 190, forecast_launch: 'Oct 8, 2026', summary: 'iOS + Android for loyalty customers. Browse + auth built.',
-          scope_in: 'React Native MVP: login/signup, browse, PDP, cart, checkout, order history, loyalty balance. Push notifications for order updates.',
-          scope_out: 'In-app chat. Gamification. Tablet-specific layouts.',
-          phases: [
-            { name: 'Project scaffold + CI', status: 'done', percent: 100 },
-            { name: 'Auth + onboarding', status: 'done', percent: 100 },
-            { name: 'Browse + PDP', status: 'active', percent: 55 },
-            { name: 'Cart + checkout', status: 'planned', percent: 0 },
-            { name: 'Loyalty + push', status: 'planned', percent: 0 },
-            { name: 'App Store + Play Store submission', status: 'planned', percent: 0 },
-          ],
-          readiness: [
-            { item: 'Apple Developer account active', done: true },
-            { item: 'Google Play account active', done: true },
-            { item: 'Cart flow implemented', done: false },
-            { item: 'Checkout flow with all 4 gateways', done: false },
-            { item: 'Push notification certs + service', done: false },
-            { item: 'Beta test with 10 loyalty customers', done: false },
-            { item: 'Store listings + screenshots', done: false },
-          ],
-          risks: ['Apple review cycle — 1-2 weeks of buffer needed.', 'Payment SDK parity across iOS + Android.', 'Usama is 20h/wk — capacity constrained.'],
-          links: [],
-        },
-        { id: 'leg', name: 'Legacy Maintenance', owner_email: 'faizan@phonebot.com.au', contributor_emails: [], kickoff: '2026-04-01', deadline: '2099-12-31', status: 'active', sync_cadence: 'daily', repos: ['/phonebot-legacy'], traffic_light: 'red', percent_complete: 0, days_remaining: 999, days_of_work_required: 40, forecast_launch: 'Ongoing', summary: 'phonebot.com.au 1.0 patches. Consumes ~15h/wk.',
-          scope_in: 'Keep 1.0 running until 2.0 cutover. Hotfixes only. DNS + infra. Customer escalations.',
-          scope_out: 'Feature work. Refactors. Anything optional.',
-          phases: [
-            { name: 'Maintenance mode', status: 'active', percent: 100 },
-          ],
-          readiness: [
-            { item: 'On-call rotation agreed', done: false },
-            { item: 'Cutover date locked', done: false },
-            { item: 'Sunset comms drafted', done: false },
-          ],
-          risks: ['Eats dev time that should be on 2.0.', 'Hardcoded secrets still present.', 'No test coverage.'],
-          links: [],
-        },
-      ],
+      projects: [],
       scoring: {
         directions: {
           velocity: { label: 'Velocity', threshold: 75, description: 'Volume of shipped work' },
@@ -2955,70 +2909,15 @@ function devdash() {
       });
     },
 
+    // Pre-launch: every seeded dev starts with empty placeholders. _isEmpty flag
+    // triggers the "No activity data yet" banner on the dev view (devdash.html
+    // looks for emptyDev shape below). Real data lands once Bitbucket webhooks fire
+    // (commits) and devs use the "Log my day" form (handoffs).
     devMockData: {
-      'faizan@phonebot.com.au': {
-        compass: { velocity: 78, craft: 88, reliability: 68, drive: 72 },
-        handoff_mult: 0.978,
-        traffic_light: 'green', items_closed: 3, target: 2.5,
-        summary: 'Shipped R0-09 HMAC token, R0-10 throttle, order-confirmation email rebuild. Burned 15h on legacy firefighting.',
-        off_project_hours: 15, off_project_note: 'Legacy phonebot.com.au hack + DNS.',
-        commits: [
-          { sha: '8f4d92a', message: 'R0-09: HMAC token on order-status, unified 403', audited: true },
-          { sha: '12ab56c', message: 'R0-10: throttle verifyCustomerOrder + trackOrder', audited: true },
-          { sha: '7def89b', message: 'Order confirmation email: rebuild in login-modal style', audited: true },
-        ],
-        queue: [
-          { id: 1, ticket: 'P0-13', title: 'Payment amount validation across 4 gateways', priority: 'high' },
-          { id: 2, ticket: 'P0-15', title: 'Zip webhook signature validation', priority: 'high' },
-          { id: 3, ticket: 'R0-07', title: 'env() → config() sweep', priority: 'medium' },
-        ],
-      },
-      'moazzam@phonebot.com.au': {
-        compass: { velocity: 82, craft: 88, reliability: 85, drive: 58 },
-        handoff_mult: 0.955,
-        traffic_light: 'green', items_closed: 4, target: 3,
-        summary: 'Phonebot HQ staff roster + WhatsApp webhook throttling. Zero QA bugs this week.',
-        off_project_hours: 0, off_project_note: '',
-        commits: [
-          { sha: '9a2f7c1', message: 'HQ: staff roster component + filters', audited: true },
-          { sha: '44b1d3e', message: 'HQ: WhatsApp webhook rate-limit via Lambda queue', audited: true },
-          { sha: 'ea98f22', message: 'HQ: conversation side-panel polish', audited: true },
-          { sha: '3ccd456', message: 'HQ: fix pagination off-by-one', audited: true },
-        ],
-        queue: [
-          { id: 4, ticket: 'HQ-12', title: 'Daily brief email template', priority: 'medium' },
-          { id: 5, ticket: 'HQ-14', title: 'Staff filter by market', priority: 'low' },
-        ],
-      },
-      'faisal@phonebot.com.au': {
-        compass: { velocity: 58, craft: 78, reliability: 55, drive: 32 },
-        handoff_mult: 0.963,
-        traffic_light: 'yellow', items_closed: 2, target: 3,
-        summary: 'Variant selector shipped, A/B framework integrated. Missed target by 1 — 1.5 days on Safari regression.',
-        off_project_hours: 3, off_project_note: 'Customer escalation on iOS checkout.',
-        commits: [
-          { sha: '5bc1234', message: 'PPR: variant selector refactor', audited: true },
-          { sha: '7de5678', message: 'PPR: A/B testing framework scaffold', audited: false },
-        ],
-        queue: [
-          { id: 6, ticket: 'PPR-22', title: 'Image gallery zoom', priority: 'medium' },
-          { id: 7, ticket: 'PPR-24', title: 'Related products shelf', priority: 'low' },
-        ],
-      },
-      'usama@phonebot.com.au': {
-        compass: { velocity: 45, craft: 65, reliability: 38, drive: 28 },
-        handoff_mult: 0.948,
-        traffic_light: 'red', items_closed: 1, target: 2,
-        summary: 'Product browse screen shipped. Struggling with iOS push — needs pairing or external help.',
-        off_project_hours: 0, off_project_note: '',
-        commits: [
-          { sha: '2fa9bc3', message: 'Mobile: product browse screen + infinite scroll', audited: true },
-        ],
-        queue: [
-          { id: 8, ticket: 'MOB-18', title: 'iOS push notifications', priority: 'high' },
-          { id: 9, ticket: 'MOB-20', title: 'Cart persistence across sessions', priority: 'medium' },
-        ],
-      },
+      'faizan@phonebot.com.au': { compass: { velocity: 0, craft: 0, reliability: 0, drive: 0 }, handoff_mult: 0.85, traffic_light: 'yellow', items_closed: 0, target: 1, summary: '', off_project_hours: 0, off_project_note: '', commits: [], queue: [], _isEmpty: true },
+      'moazzam@phonebot.com.au': { compass: { velocity: 0, craft: 0, reliability: 0, drive: 0 }, handoff_mult: 0.85, traffic_light: 'yellow', items_closed: 0, target: 1, summary: '', off_project_hours: 0, off_project_note: '', commits: [], queue: [], _isEmpty: true },
+      'faisal@phonebot.com.au': { compass: { velocity: 0, craft: 0, reliability: 0, drive: 0 }, handoff_mult: 0.85, traffic_light: 'yellow', items_closed: 0, target: 1, summary: '', off_project_hours: 0, off_project_note: '', commits: [], queue: [], _isEmpty: true },
+      'usama@phonebot.com.au': { compass: { velocity: 0, craft: 0, reliability: 0, drive: 0 }, handoff_mult: 0.85, traffic_light: 'yellow', items_closed: 0, target: 1, summary: '', off_project_hours: 0, off_project_note: '', commits: [], queue: [], _isEmpty: true },
     },
     // H4 FIX — flag empty devs so the dev view can show a clear "no data yet" banner instead of all-zero panels that look broken.
     emptyDev() { return { compass: { velocity: 0, craft: 0, reliability: 0, drive: 0 }, handoff_mult: 0.85, traffic_light: 'yellow', items_closed: 0, target: 1, summary: 'No activity this week.', off_project_hours: 0, off_project_note: '', commits: [], queue: [], _isEmpty: true }; },
@@ -3062,45 +2961,36 @@ function devdash() {
       return '';
     },
 
-    bugs: [
-      { id: 1, summary: 'Checkout payment button allows double-click → duplicate orders', severity: 'HIGH', project: 'Phonebot 2.0', status: 'open', days_open: 2, assigned_to: 'Faizan' },
-      { id: 2, summary: 'Voucher removal leaves discount applied', severity: 'FUNCTIONAL', project: 'Phonebot 2.0', status: 'in_progress', days_open: 4, assigned_to: 'Faizan' },
-      { id: 3, summary: 'PDP stock banner overlaps price on mobile', severity: 'VISUAL', project: 'Product Page Revamp', status: 'open', days_open: 1, assigned_to: 'Faisal' },
-      { id: 4, summary: 'Staff roster shows duplicate Imran', severity: 'FUNCTIONAL', project: 'Phonebot HQ', status: 'open', days_open: 3, assigned_to: 'Moazzam' },
-      { id: 5, summary: 'Mobile browse lazy-load shows wrong product', severity: 'HIGH', project: 'Mobile App MVP', status: 'open', days_open: 5, assigned_to: 'Usama' },
-      { id: 6, summary: 'Phonebot 1.0 homepage broken on iOS 17', severity: 'HIGH', project: 'Legacy Maintenance', status: 'in_progress', days_open: 1, assigned_to: 'Faizan' },
-    ],
-    auditFindings: [
-      { id: 1, title: 'Checkout parity audit: 1.0 vs 2.0', project: 'Phonebot 2.0', days_ago: 4, action_items: 3, status: 'open', findings: 'FINDING 1: 2.0 missing /checkout/express guest path.\nFINDING 2: Discount-code UX 3 clicks deeper.\nACTION: Surface discount on main checkout page.' },
-      { id: 2, title: 'HQ: staff data model review', project: 'Phonebot HQ', days_ago: 8, action_items: 2, status: 'resolved', findings: 'Records duplicated across market tables. Moazzam unified schema.' },
-      { id: 3, title: 'PPR: accessibility audit', project: 'Product Page Revamp', days_ago: 2, action_items: 5, status: 'open', findings: '• Missing alt text on hero images\n• Focus ring missing\n• WCAG AA contrast fail on out-of-stock badge' },
-    ],
-    featureRequests: [
-      { id: 1, description: 'Add "notify me" on out-of-stock pages', urgency: 'medium', project: 'Phonebot 2.0', requester: 'Fahad', target_dev: 'Faizan', age_days: 2 },
-      { id: 2, description: 'Show recent searches under search bar', urgency: 'low', project: 'Product Page Revamp', requester: 'Imran', target_dev: 'Faisal', age_days: 5 },
-      { id: 3, description: 'Biometric login (TouchID/FaceID)', urgency: 'high', project: 'Mobile App MVP', requester: 'Fahad', target_dev: 'Usama', age_days: 3 },
-    ],
-    blockers: [
-      { id: 1, title: 'R0-06 secret rotation approval', waiting_on: 'Fahad', days: 4 },
-      { id: 2, title: 'CyberSource portal owner', waiting_on: 'Fahad', days: 5 },
-      { id: 3, title: 'Afterpay 1.0 models check', waiting_on: 'Faizan', days: 4 },
-    ],
-    stuckPrs: [
-      { id: 1, pr_id: 142, repo: 'pb-backend', days_stuck: 3, waiting_on: 'Faizan' },
-      { id: 2, pr_id: 87, repo: 'phonebot-hq', days_stuck: 4, waiting_on: 'Moazzam' },
-      { id: 3, pr_id: 23, repo: 'mobile-app', days_stuck: 5, waiting_on: 'Usama' },
-    ],
-    regressionCandidates: [
-      { id: 1, current: 'Checkout double-click duplicate orders', past: 'R0-04 checkout idempotency', past_week: 8, project: 'Phonebot 2.0', status: 'open' },
-      { id: 2, current: 'PDP stock banner overlap', past: 'PPR-11 stock badge layout', past_week: 3, project: 'Product Page Revamp', status: 'open' },
-    ],
-    auditLog: [
-      { id: 1, when: '2026-04-24 09:12', who: 'Fahad', section: 'Scoring', change: 'Changed Drive threshold: 70 → 75' },
-      { id: 2, when: '2026-04-23 18:45', who: 'Imran', section: 'Users', change: 'Updated Usama hours_per_week: 40 → 20' },
-      { id: 3, when: '2026-04-22 14:03', who: 'Fahad', section: 'Projects', change: 'Added project: Mobile App MVP' },
-    ],
+    // All shared collections start empty for go-live. Real entries arrive from
+    // the team using the SPA forms (bugs, audits, features, blockers) or from
+    // /api/bitbucket-hook (commits) or from "Log my day" (handoffs).
+    bugs: [],
+    auditFindings: [],
+    featureRequests: [],
+    blockers: [],
+    stuckPrs: [],
+    regressionCandidates: [],
+    auditLog: [],
 
-    init() {
+    sharedStateLoaded: false,
+    // Becomes true once the webhook has delivered any real commit. Drives the
+    // "🚧 Demo data" banner — present until at least one real commit lands.
+    get realDataAvailable() { return Array.isArray(this.commits) && this.commits.length > 0; },
+    commitsForDev(email) {
+      if (!email || !Array.isArray(this.commits)) return [];
+      const cutoff = Date.now() - 14 * 86400 * 1000;
+      return this.commits
+        .filter(c => c && c.author_email === email && new Date(c.timestamp).getTime() >= cutoff)
+        .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+    },
+    // Real commits if any have arrived for this dev; else fall back to synthetic
+    // devMockData.commits so cards still render meaningfully pre-Bitbucket-sync.
+    displayCommitsFor(email) {
+      const real = this.commitsForDev(email);
+      if (real.length) return real;
+      return (this.devMockData?.[email]?.commits) || [];
+    },
+    async init() {
       const savedTheme = localStorage.getItem('devdash_theme');
       if (savedTheme) this.theme = savedTheme;
       const savedDensity = localStorage.getItem('devdash_density');
@@ -3111,16 +3001,38 @@ function devdash() {
       this.updateClock();
       setInterval(() => this.updateClock(), 1000);
       setInterval(() => this.rotateQuote(), 12000);
-      const saved = localStorage.getItem('devdash_session');
-      if (saved) {
-        try {
-          const { user, ts } = JSON.parse(saved);
-          if (Date.now() - ts < 24 * 60 * 60 * 1000) {
-            this.currentUser = user;
-            this.activeRoleTab = this.visibleRoleTabs()[0];
-            if (this.currentUser.role === 'dev') this.devViewSelected = this.currentUser.email;
-          }
-        } catch (e) {}
+      // Worker-injected session takes precedence over localStorage. When devdash.html is
+      // served by the Cloudflare Worker, window.__SESSION__ carries the verified email +
+      // role from the TOTP login flow — trust it and skip the in-page login UI.
+      const injected = (typeof window !== 'undefined') ? window.__SESSION__ : null;
+      if (injected && injected.email) {
+        const match = (this.config.users || []).find(u => u.email === injected.email);
+        if (match) {
+          this.currentUser = { ...match, role: injected.role || match.role };
+        } else {
+          // Email is authenticated but not yet in the local users list (new hire, or
+          // pre-migration). Synthesise a minimal user record so the SPA can boot.
+          this.currentUser = {
+            email: injected.email,
+            role: injected.role || 'viewer',
+            displayName: injected.email.split('@')[0],
+            status: 'active',
+          };
+        }
+        this.activeRoleTab = this.visibleRoleTabs()[0];
+        if (this.currentUser.role === 'dev') this.devViewSelected = this.currentUser.email;
+      } else {
+        const saved = localStorage.getItem('devdash_session');
+        if (saved) {
+          try {
+            const { user, ts } = JSON.parse(saved);
+            if (Date.now() - ts < 24 * 60 * 60 * 1000) {
+              this.currentUser = user;
+              this.activeRoleTab = this.visibleRoleTabs()[0];
+              if (this.currentUser.role === 'dev') this.devViewSelected = this.currentUser.email;
+            }
+          } catch (e) {}
+        }
       }
       const defaultConfig = JSON.parse(JSON.stringify(this.config));
       this.corruptStorageKeys = [];
@@ -3142,6 +3054,25 @@ function devdash() {
           }
         }
       });
+      // Multi-user shared state — when authenticated by the Worker, fetch the
+      // server's view and let it win over localStorage. Server is the source
+      // of truth for everything except devMockData (per-browser synthetic).
+      if (typeof window !== 'undefined' && window.__SESSION__) {
+        try {
+          const r = await fetch('/api/state', { credentials: 'same-origin' });
+          if (r.ok) {
+            const remote = await r.json();
+            for (const k of Object.keys(remote)) {
+              if (remote[k] !== null && k !== 'devMockData') {
+                this[k] = remote[k];
+              }
+            }
+            this.sharedStateLoaded = true;
+          }
+        } catch (e) {
+          console.warn('Initial /api/state fetch failed; using local cache', e);
+        }
+      }
       // L15 FIX — rotate unbounded arrays at load-time. Move the oldest half to archive keys if over threshold.
       if (this.rewardEvents.length > 500) {
         const archive = this.rewardEvents.slice(0, this.rewardEvents.length - 250);
@@ -3166,7 +3097,7 @@ function devdash() {
         if (_configSaveTimer) clearTimeout(_configSaveTimer);
         _configSaveTimer = setTimeout(() => {
           try {
-            localStorage.setItem('devdash_config', JSON.stringify(this.config));
+            this.save('config');
           } catch (e) {
             console.error('config auto-save failed', e);
             this.storageFull = true;
@@ -3223,10 +3154,20 @@ function devdash() {
         if (r.status === undefined) r.status = 'open';
       }
     },
-    // HONESTY FIX — full data wipe for go-live. Clears every devdash_* key in this browser.
-    resetAllDashboardData() {
-      if (!confirm('Wipe ALL dashboard data in this browser?\n\nThis will delete: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, off-project mock data, your session, theme, density, and TOTP provisioning flags.\n\nUse this once before going live to clear demo seeds. Irreversible.\n\nContinue?')) return;
-      if (!confirm('Second confirm — really wipe ALL devdash_* localStorage keys?')) return;
+    // HONESTY FIX — full data wipe for go-live. Clears every devdash_* key in this browser
+    // AND wipes server-side shared state via /api/state/_wipe (when authenticated).
+    async resetAllDashboardData() {
+      if (!confirm('Wipe ALL dashboard data — for THE WHOLE TEAM?\n\nThis will delete: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, AND your local session/theme/density/TOTP provisioning flags.\n\nThis affects every user when running on the deployed Worker. Use ONCE before going live to clear demo seeds. Irreversible.\n\nContinue?')) return;
+      if (!confirm('Second confirm — really wipe ALL shared dashboard data for the entire team?')) return;
+      if (typeof window !== 'undefined' && window.__SESSION__) {
+        try {
+          const r = await fetch('/api/state/_wipe', { method: 'POST', credentials: 'same-origin' });
+          if (!r.ok) throw new Error('server wipe responded ' + r.status);
+        } catch (e) {
+          console.error('Server-side wipe failed', e);
+          if (!confirm('Server-side wipe FAILED — local will be cleared anyway. Continue?')) return;
+        }
+      }
       Object.keys(localStorage).filter(k => k.startsWith('devdash_')).forEach(k => localStorage.removeItem(k));
       location.reload();
     },
@@ -3265,7 +3206,25 @@ function devdash() {
           alert('Browser storage is full. Your recent changes may not have saved. Go to Settings → System → Danger zone and reset, OR export data to clear space.');
         }
       }
+      // Sync to the Worker shared-state API when authenticated by the Worker.
+      // devMockData is per-browser synthetic and intentionally NOT shared.
+      // 'commits' is webhook-written; SPA must never PUT it.
+      if (typeof window !== 'undefined' && window.__SESSION__
+          && this._STATE_COLLECTIONS.has(key) && !this._READONLY_COLLECTIONS.has(key)) {
+        fetch('/api/state/' + encodeURIComponent(key), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this[key]),
+          credentials: 'same-origin',
+        }).catch(err => console.warn('state sync failed for', key, err));
+      }
     },
+    _STATE_COLLECTIONS: new Set([
+      'bugs','auditFindings','featureRequests','disputes','blockers','stuckPrs',
+      'regressionCandidates','rewardEvents','payoutBatches','pmAssessments',
+      'clockEntries','growthLog','auditLog','handoffs','commits','config',
+    ]),
+    _READONLY_COLLECTIONS: new Set(['commits']),
     storageFull: false, _storageWarnedOnce: false, corruptStorageKeys: [],
     // M1 FIX — single-flight guard for submit handlers to block double-submits.
     _inFlight: {},
@@ -3276,7 +3235,7 @@ function devdash() {
       return true;
     },
     saveConfig() {
-      localStorage.setItem('devdash_config', JSON.stringify(this.config));
+      this.save('config');
       this.auditLog.unshift({ id: Date.now(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: this.activeSettingsTab, change: 'Saved ' + this.activeSettingsTab.toLowerCase() + ' section' });
       this.save('auditLog');
     },
@@ -3299,7 +3258,14 @@ function devdash() {
       if (this.currentUser.role === 'dev') this.devViewSelected = this.currentUser.email;
       this.loginStep = 'pick'; this.selectedUser = null; this.codeInput = '';
     },
-    signOut() { localStorage.removeItem('devdash_session'); this.currentUser = null; this.devViewSelected = null; this.activeRoleTab = 'ceo'; },
+    signOut() {
+      localStorage.removeItem('devdash_session');
+      this.currentUser = null; this.devViewSelected = null; this.activeRoleTab = 'ceo';
+      // When the SPA is served by the Worker, also clear the server-side session.
+      if (typeof window !== 'undefined' && window.__SESSION__) {
+        window.location.href = '/logout';
+      }
+    },
 
     VISIBILITY: {
       ceo: ['ceo','pm','dev','qa','qa_auditor','settings'],
@@ -3895,7 +3861,12 @@ function devdash() {
       // Filter commits by rough project-prefix match (real data will have project_id per commit).
       const prefixes = { pb2: ['R0', 'P0', 'P1', 'P2', 'order', 'Order', 'payment', 'checkout'], hq: ['HQ', 'WhatsApp', 'staff'], ppr: ['PPR', 'variant', 'A/B', 'PDP'], mob: ['Mobile', 'mobile', 'iOS', 'Android', 'app'], leg: ['legacy', 'Legacy', 'patch'] };
       const pfx = prefixes[projectId] || [];
-      const commits = dev.commits.filter(c => pfx.some(p => c.message.includes(p)));
+      // Prefer real commits (filtered by project resolved at webhook time);
+      // fall back to message-prefix matching against synthetic commits.
+      const realByProject = this.commitsForDev(dev.email).filter(c => c.project === proj.name);
+      const commits = realByProject.length
+        ? realByProject
+        : (dev.commits || []).filter(c => pfx.some(p => c.message.includes(p)));
       const items_closed = Math.max(0, Math.round(dev.items_closed * (0.4 + (seed % 7) * 0.1)));
       const off_project_hours = proj.id === 'leg' ? dev.off_project_hours : Math.round(dev.off_project_hours * 0.3);
       return {
@@ -4550,6 +4521,66 @@ function devdash() {
       this.save('auditLog');
       this.newOffProject = { description: '', hours: '', status: 'done' };
       this.showOffProjectForm = false;
+    },
+    openHandoffForm() {
+      const today = new Date().toISOString().slice(0, 10);
+      const existing = this.handoffs.find(h => h.dev_email === this.currentUser?.email && h.date === today);
+      if (existing) {
+        // Pre-fill from today's existing entry so devs can append/correct rather than overwriting blindly.
+        this.handoffDraft = {
+          project: existing.project || (this.config.projects?.[0]?.name || ''),
+          closed: (existing.closed || []).join(', '),
+          in_progress: existing.in_progress || '',
+          open: existing.open || '',
+          off_project: existing.off_project || '',
+          off_project_hours: existing.off_project_hours || 0,
+        };
+      } else {
+        this.handoffDraft = {
+          project: this.activeProject !== 'all' ? this.activeProject : (this.config.projects?.[0]?.name || ''),
+          closed: '', in_progress: '', open: '', off_project: '', off_project_hours: 0,
+        };
+      }
+      this.showHandoffForm = true;
+    },
+    submitHandoff() {
+      if (!this._guard('submitHandoff')) return;
+      const email = this.currentUser?.email;
+      if (!email) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const closed = this.handoffDraft.closed
+        .split(',').map(s => s.trim()).filter(Boolean);
+      const hours = parseFloat(this.handoffDraft.off_project_hours);
+      const entry = {
+        id: Date.now(),
+        dev_email: email,
+        date: today,
+        project: this.handoffDraft.project || '',
+        closed,
+        in_progress: this.handoffDraft.in_progress || '',
+        open: this.handoffDraft.open || '',
+        off_project: this.handoffDraft.off_project || '',
+        off_project_hours: Number.isFinite(hours) ? hours : 0,
+        created_at: new Date().toISOString(),
+        author: this.currentUser?.displayName || email,
+      };
+      // Replace any existing entry for this dev/date so a dev can edit-and-resubmit.
+      this.handoffs = [entry, ...this.handoffs.filter(h => !(h.dev_email === email && h.date === today))];
+      this.save('handoffs');
+      this.auditLog.unshift({
+        id: Date.now() + 1,
+        when: new Date().toISOString().replace('T',' ').slice(0,16),
+        who: this.currentUser?.displayName || '—',
+        section: 'Handoff',
+        change: `Logged day · closed ${closed.length || 'none'} · ${this.handoffDraft.in_progress ? 'in-progress' : ''}${this.handoffDraft.open ? ' · open' : ''}`.trim(),
+      });
+      this.save('auditLog');
+      this.showHandoffForm = false;
+    },
+    latestHandoffFor(email) {
+      return (this.handoffs || [])
+        .filter(h => h.dev_email === email)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
     },
     submitPmAssessment() {
       if (!this._guard('submitPmAssessment')) return;
