@@ -14,3 +14,18 @@ worker/dist/
 # macOS
 .DS_Store
 **/.DS_Store
+
+# TOTP provisioning artifacts — QR codes contain secrets, never commit
+provisioning-qr-codes/
+
+# Local secrets used by the devdash-smoke agent — never commit
+.devdash-secrets.env
+
+# Playwright UI tests — node_modules and per-run screenshots
+tests-ui/node_modules/
+tests-ui/screenshots/
+tests-ui/test-results/
+tests-ui/playwright-report/
+
+# Smoke-test outputs (synthetic HTML, ad-hoc test scripts)
+output/

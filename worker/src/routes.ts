@@ -4,25 +4,44 @@ import {
   createSession, getSession, deleteSession,
   sessionCookieHeader, clearCookieHeader, readSessionCookie,
 } from './session';
+import { getAllState, putCollection, clearAllState, isCollection } from './state';
+import { verifySignature, parsePushEvent, mergeCommits, CanonicalCommit } from './bitbucket';
+// @ts-ignore — bundled as text by wrangler [[rules]] type=Text
+import devdashHtml from '../../devdash.html';
 
 interface UserRecord {
   role: string;
   totp_secret_encrypted: string;
 }
 
+function escapeForScript(s: string): string {
+  return s.replace(/</g, '\\u003c').replace(/-->/g, '--\\u003e');
+}
+
+function renderSpa(email: string, role: string): string {
+  const session = JSON.stringify({ email, role });
+  const tag = `<script>window.__SESSION__ = ${escapeForScript(session)};</script>`;
+  if (devdashHtml.includes('<!--SESSION_INJECT-->')) {
+    return devdashHtml.replace('<!--SESSION_INJECT-->', tag);
+  }
+  // Fallback if placeholder is missing — inject just before </head>
+  return devdashHtml.replace('</head>', `${tag}\n</head>`);
+}
+
 const LOGIN_FORM = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>devdash - login</title>
+<title>Phonebot — Dev Dashboard</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, system-ui, sans-serif; background: #0e0e12; color: #e6e6e6;
          min-height: 100vh; display: flex; align-items: center; justify-content: center; }
   .box { background: #15151c; border: 1px solid #2a2a35; border-radius: 12px;
-         padding: 32px; width: 100%; max-width: 360px; }
-  h1 { font-size: 20px; color: #fff; margin-bottom: 8px; }
-  p.sub { color: #888; font-size: 13px; margin-bottom: 20px; }
+         padding: 32px; width: 100%; max-width: 380px; }
+  .brand { font-size: 11px; color: #ffaa00; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  h1 { font-size: 22px; color: #fff; margin-bottom: 6px; }
+  p.sub { color: #888; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
   label { display: block; color: #aaa; font-size: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
   input { width: 100%; padding: 10px 12px; background: #0e0e12; border: 1px solid #2a2a35;
           color: #fff; font-size: 14px; font-family: inherit; border-radius: 6px; margin-bottom: 14px; }
@@ -31,18 +50,21 @@ const LOGIN_FORM = `<!DOCTYPE html>
            font-size: 14px; font-weight: 600; border-radius: 6px; cursor: pointer; font-family: inherit; }
   button:hover { background: #ffbb33; }
   .err { color: #f87171; font-size: 12px; margin-bottom: 12px; }
+  .footer { color: #555; font-size: 11px; margin-top: 18px; text-align: center; }
 </style>
 </head>
 <body>
 <form class="box" method="post" action="/login">
-  <h1>devdash</h1>
-  <p class="sub">Enter your email and 6-digit code from Google Authenticator.</p>
+  <div class="brand">Phonebot</div>
+  <h1>Dev Dashboard</h1>
+  <p class="sub">Team-only. Sign in with your <strong>@phonebot.com.au</strong> email and the 6-digit code from Google Authenticator.</p>
   __ERROR__
   <label for="email">Email</label>
-  <input type="email" name="email" id="email" required autocomplete="email">
+  <input type="email" name="email" id="email" required autocomplete="email" placeholder="you@phonebot.com.au">
   <label for="code">Authenticator code</label>
-  <input type="text" name="code" id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code">
-  <button type="submit">Log in</button>
+  <input type="text" name="code" id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" placeholder="123456">
+  <button type="submit">Sign in</button>
+  <div class="footer">Trouble signing in? Ask Fahad to re-issue your QR.</div>
 </form>
 </body>
 </html>`;
@@ -71,32 +93,104 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return handleLiveFeed(req, env);
   }
 
-  // Default: GET / — serve dashboard if session valid, else login form
+  // Bitbucket webhook (Mustafa branch impl) — runs BEFORE the session check.
+  // Authenticated by HMAC-SHA256 signature on the request body.
+  // TODO: consolidate with Faizan's /bitbucket/webhook (line ~89). Both are
+  // signed Bitbucket-Cloud receivers; this one stores into state:commits +
+  // resolves repo→project, while Faizan's stores into events:list and feeds
+  // the /live page. Pick one canonical implementation in a follow-up PR.
+  if (url.pathname === '/api/bitbucket-hook' && req.method === 'POST') {
+    return handleApiBitbucketHook(req, env);
+  }
+
+  // All other routes require a valid session.
   const token = readSessionCookie(req);
   if (!token) {
-    return loginHtml();
+    return url.pathname.startsWith('/api/')
+      ? jsonError(401, 'unauthenticated')
+      : loginHtml();
   }
   const session = await getSession(env.DASHBOARD_KV, token);
   if (!session) {
-    return loginHtml();
+    return url.pathname.startsWith('/api/')
+      ? jsonError(401, 'session expired')
+      : loginHtml();
   }
 
-  // Fetch the role-appropriate HTML payload from KV
-  const dashKey = session.role === 'dev'
-    ? `dashboard:latest:dev:${session.email}`
-    : `dashboard:latest:${session.role}`;
-  const html = await env.DASHBOARD_KV.get(dashKey);
-  if (!html) {
-    return new Response(
-      `<!DOCTYPE html><html><body style="background:#0e0e12;color:#e6e6e6;font-family:system-ui;padding:40px">
-<h2>Dashboard not yet generated for your role.</h2>
-<p>Fahad runs the weekly audit on Sunday nights. Your first view will be available after the next run.</p>
-<p><a href="/logout" style="color:#ffaa00">Log out</a></p>
-</body></html>`,
-      { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-    );
+  // Shared-state API.
+  if (url.pathname === '/api/state' && req.method === 'GET') {
+    const state = await getAllState(env.DASHBOARD_KV);
+    return Response.json(state, { headers: { 'Cache-Control': 'no-store' } });
   }
-  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  if (url.pathname === '/api/state/_wipe' && req.method === 'POST') {
+    await clearAllState(env.DASHBOARD_KV);
+    return new Response(null, { status: 204 });
+  }
+  if (url.pathname.startsWith('/api/state/')) {
+    const key = decodeURIComponent(url.pathname.slice('/api/state/'.length));
+    if (!isCollection(key)) {
+      return jsonError(400, `unknown collection: ${key}`);
+    }
+    if (req.method === 'PUT') {
+      let value: unknown;
+      try { value = await req.json(); } catch { return jsonError(400, 'invalid JSON body'); }
+      await putCollection(env.DASHBOARD_KV, key, value);
+      return new Response(null, { status: 204 });
+    }
+    return jsonError(405, 'method not allowed');
+  }
+
+  // Default: serve the SPA with the authenticated session injected.
+  return new Response(renderSpa(session.email, session.role), {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
+function jsonError(status: number, message: string): Response {
+  return Response.json({ error: message }, { status });
+}
+
+// Mustafa-branch handler: stores into state:commits, used by /api/bitbucket-hook.
+// (Faizan's same-named handler below stores into events:list, used by /bitbucket/webhook.)
+async function handleApiBitbucketHook(req: Request, env: Env): Promise<Response> {
+  const sig = req.headers.get('X-Hub-Signature') || req.headers.get('x-hub-signature') || '';
+  const body = await req.text();
+  if (!await verifySignature(body, sig, env.BITBUCKET_WEBHOOK_SECRET)) {
+    return jsonError(401, 'invalid signature');
+  }
+  let payload: unknown;
+  try { payload = JSON.parse(body); } catch { return jsonError(400, 'invalid JSON'); }
+
+  // Resolve repo full_name -> project name from the live config in KV.
+  const cfgRaw = await env.DASHBOARD_KV.get('state:config');
+  const cfg = cfgRaw ? safeJson(cfgRaw) : {};
+  const repoToProject: Record<string, string> = {};
+  for (const p of (cfg as any)?.projects || []) {
+    for (const r of (p?.repos || [])) {
+      const slug = String(r).replace(/^\//, '').trim();
+      if (slug) repoToProject[slug] = p.name;
+    }
+  }
+
+  const incoming = parsePushEvent(payload, repoToProject);
+  if (!incoming.length) {
+    // Tag-only push, branch delete, force-push with no new commits, etc.
+    return new Response(null, { status: 204 });
+  }
+
+  const existingRaw = await env.DASHBOARD_KV.get('state:commits');
+  const existing = (existingRaw ? safeJson(existingRaw) : []) as CanonicalCommit[];
+  const merged = mergeCommits(existing, incoming);
+  await env.DASHBOARD_KV.put('state:commits', JSON.stringify(merged));
+
+  return Response.json({ accepted: incoming.length, total: merged.length });
+}
+
+function safeJson(s: string): unknown {
+  try { return JSON.parse(s); } catch { return null; }
 }
 
 async function handleLogin(req: Request, env: Env): Promise<Response> {

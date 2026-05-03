@@ -4,12 +4,18 @@ import { sendEmail, formatAlertEmail, AlertSnapshot } from './email';
 export interface Env {
   DASHBOARD_KV: KVNamespace;
   TOTP_ENCRYPTION_KEY: string;
-  // Optional. When unset, /bitbucket/webhook returns 404 and /live is hidden.
-  // Set via: wrangler secret put WEBHOOK_SECRET
+  // TODO: consolidate the two webhook secrets below — they're duplicates from
+  // parallel implementations on Mustafa + FAIZAN-DEV branches. Pick one
+  // canonical name (BITBUCKET_WEBHOOK_SECRET is more explicit) and drop the
+  // other in a follow-up PR. For now both coexist so neither implementation
+  // breaks; routes use whichever they know about.
+  //
+  // Faizan's /bitbucket/webhook + /live page (FAIZAN-DEV branch):
   WEBHOOK_SECRET?: string;
   // "clone" | "webhook" | "both". Defaults to "clone" when unset.
-  // Set via: wrangler secret put LIVE_FEED_MODE
   LIVE_FEED_MODE?: string;
+  // Mustafa's /api/bitbucket-hook + /api/state.commits (Mustafa branch):
+  BITBUCKET_WEBHOOK_SECRET: string;
 }
 
 export default {
