@@ -2241,7 +2241,7 @@
           <div class="text-[11px] mb-3" style="color: var(--text-muted)">Resets projects, users, scoring, rewards, system config to built-in defaults. Handoff notes, bugs, audits are kept. Use this if stale saved data is masking new defaults.</div>
           <button @click="resetConfigToDefaults()" class="danger">Reset all settings to defaults</button>
         </div>
-        <!-- HONESTY FIX — full data reset for go-live (clears every devdash_* localStorage key, including bugs/audits/rewards/etc). -->
+        <!-- Full data reset for go-live (clears every devdash_* localStorage key, including bugs/audits/rewards/etc). -->
         <div class="card p-5" style="border-color: rgba(248,113,113,0.5)">
           <div class="text-xs uppercase tracking-wider mb-2" style="color: #f87171">Go-live wipe</div>
           <div class="text-[11px] mb-3" style="color: var(--text-muted)">Wipes <strong>every</strong> dashboard storage key in this browser: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, off-project mock data, sessions, theme, density, provisioning flags. Use ONCE before going live to clear demo seeds. Two confirms required.</div>
@@ -2974,7 +2974,7 @@
                 <template x-if="projectDetailEdit"><button @click="projectDetail().risks = [...(projectDetail().risks || []), 'New risk']" class="secondary text-xs">+ Add risk</button></template>
               </div>
               <template x-if="(projectDetail().risks || []).length === 0">
-                <div class="text-xs italic" style="color: var(--text-fade)">No risks logged. Click Edit above, then "+ Add risk" if you're being honest about this project.</div>
+                <div class="text-xs italic" style="color: var(--text-fade)">No risks logged. Click Edit above, then "+ Add risk" to capture them.</div>
               </template>
               <ul class="space-y-1.5 text-sm" style="color: var(--text-muted)">
                 <template x-for="(rk, rkIdx) in (projectDetail().risks || [])" :key="rkIdx">
@@ -3186,7 +3186,7 @@ function devdash() {
       ],
       reliability: [
         { label: 'Pull less, finish more (WIP limits)', url: 'https://kanbantool.com/kanban-library/kanban-principles/wip-limits' },
-        { label: 'Estimate honestly, not optimistically', url: 'https://www.pluralsight.com/blog/software-development/estimating-tasks-time' },
+        { label: 'Estimate realistically, not optimistically', url: 'https://www.pluralsight.com/blog/software-development/estimating-tasks-time' },
         { label: 'Timebox before you dive in', url: 'https://www.atlassian.com/agile/project-management/timeboxing' },
       ],
       drive: [
@@ -3483,7 +3483,13 @@ function devdash() {
           if (r.ok) {
             const remote = await r.json();
             for (const k of Object.keys(remote)) {
-              if (remote[k] !== null && k !== 'devMockData') {
+              if (remote[k] === null || k === 'devMockData') continue;
+              // 'config' is a partial-merge target — preserve SPA defaults like
+              // scoring/holidays/growth that the server-side state may not include.
+              // For everything else (arrays of records), full replace is correct.
+              if (k === 'config' && remote.config && typeof remote.config === 'object') {
+                this.config = { ...this.config, ...remote.config };
+              } else {
                 this[k] = remote[k];
               }
             }
@@ -3589,7 +3595,7 @@ function devdash() {
         if (r.status === undefined) r.status = 'open';
       }
     },
-    // HONESTY FIX — full data wipe for go-live. Clears every devdash_* key in this browser
+    // Full data wipe for go-live. Clears every devdash_* key in this browser
     // AND wipes server-side shared state via /api/state/_wipe (when authenticated).
     async resetAllDashboardData() {
       if (!confirm('Wipe ALL dashboard data — for THE WHOLE TEAM?\n\nThis will delete: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, AND your local session/theme/density/TOTP provisioning flags.\n\nThis affects every user when running on the deployed Worker. Use ONCE before going live to clear demo seeds. Irreversible.\n\nContinue?')) return;
@@ -3659,7 +3665,7 @@ function devdash() {
         regressions: this.regressionCandidates.length,
         reward_events_pending: this.rewardEvents.filter(e => e.status === 'pending').length,
       };
-      const systemPrompt = 'You are a senior engineering manager reviewing a weekly dev-team dashboard. Be terse, specific, and honest. Quote exact numbers from the snapshot. No hedging. Answer each question in 1-2 sentences.';
+      const systemPrompt = 'You are a senior engineering manager reviewing a weekly dev-team dashboard. Be terse, specific, and direct. Quote exact numbers from the snapshot. No hedging. Answer each question in 1-2 sentences.';
       const userPrompt = 'Dashboard snapshot:\n' + JSON.stringify(snapshot, null, 2) + '\n\nAnswer these questions:\n' + (cfg.ai_prompts || '');
       try {
         const endpoint = cfg.ai_provider === 'anthropic' ? 'https://api.anthropic.com/v1/messages'

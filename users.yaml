@@ -1,9 +1,9 @@
 users:
   - {email: fahad@phonebot.com.au, role: ceo}
   - {email: imran@phonebot.com.au, role: pm}
-  - {email: faizan@phonebot.com.au, role: dev}
+  - {email: developer@phonebot.com.au, role: dev}
   - {email: moazzam@phonebot.com.au, role: dev}
   - {email: faisal@phonebot.com.au, role: dev}
-  - {email: usama@phonebot.com.au, role: dev}
+  - {email: usamabashir@phonebot.com.au, role: dev}
   - {email: mustafa@phonebot.com.au, role: qa_auditor}
-  - {email: qa@phonebot.com.au, role: qa}
+  - {email: hamza@phonebot.com.au, role: qa}
