@@ -356,6 +356,32 @@ async function handleBitbucketWebhook(req: Request, env: Env): Promise<Response>
   }
   await env.DASHBOARD_KV.put(EVENTS_KEY, JSON.stringify(merged));
 
+  // Dual-write: also populate state:commits so the main dashboard's per-developer
+  // sections show the same commits. Reads repo->project mapping from state:config
+  // (PM/CEO populates this in Settings -> Projects). Uses Mustafa's canonical
+  // parser to keep the shape compatible with /api/bitbucket-hook.
+  try {
+    const cfgRaw = await env.DASHBOARD_KV.get('state:config');
+    const cfg = cfgRaw ? safeJson(cfgRaw) : {};
+    const repoToProject: Record<string, string> = {};
+    for (const p of (cfg as any)?.projects || []) {
+      for (const r of (p?.repos || [])) {
+        const slug = String(r).replace(/^\//, '').trim();
+        if (slug) repoToProject[slug] = p.name;
+      }
+    }
+    const incoming = parsePushEvent(payload, repoToProject);
+    if (incoming.length > 0) {
+      const existingRaw = await env.DASHBOARD_KV.get('state:commits');
+      const existingCommits = (existingRaw ? safeJson(existingRaw) : []) as CanonicalCommit[];
+      const mergedCommits = mergeCommits(existingCommits, incoming);
+      await env.DASHBOARD_KV.put('state:commits', JSON.stringify(mergedCommits));
+    }
+  } catch (e) {
+    // Don't fail the webhook on dual-write errors — the /live page already has the data.
+    console.error('state:commits dual-write failed', e);
+  }
+
   return new Response(JSON.stringify({ ok: true, stored: newEvents.length }), {
     headers: { 'Content-Type': 'application/json' },
   });
@@ -451,7 +477,7 @@ function renderLiveFeedHtml(events: LiveEvent[], email: string, env: Env): strin
   <thead><tr><th>Time</th><th>Repo</th><th>Branch</th><th>Author</th><th>Commit</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>
-<p class="meta">Events arrive via Bitbucket webhook, signed with HMAC-SHA256. Clone-based audit on the main dashboard runs independently — divergence between this feed and the audit is itself a forge signal.</p>
+<p class="meta">Events arrive via Bitbucket webhook, signed with HMAC-SHA256. The main dashboard runs independently and shows the same commits under each developer's section.</p>
 </body>
 </html>`;
 }
