@@ -3297,10 +3297,62 @@ function devdash() {
       },
     },
 
+    // Compute a dev's compass + activity numbers from real state:commits.
+    // Returns null when there are no commits for this email — caller falls back to
+    // devMockData / emptyDev so legacy seed users still render. Every commit counts
+    // positively; the SPA does not (yet) validate authorship or filter low-signal
+    // commits — that's a deliberate quick-win choice for now so the boss can see
+    // movement on the wall as soon as devs push code. Quality scoring lives
+    // server-side (scripts/dashboard/merit.py) and can be wired in later.
+    _activityFromCommits(email) {
+      const commits = this.commitsForDev(email);
+      if (!commits.length) return null;
+
+      const count = commits.length;
+      const days = new Set(commits.map(c => (c.timestamp || '').slice(0, 10))).size;
+      const repos = new Set(commits.map(c => c.repo).filter(Boolean)).size;
+      const quality = commits.filter(c => /^(test|refactor|fix|chore|docs)\b/i.test(c.message || '')).length;
+      const itemsClosed = commits.filter(c => /^(feat|fix)\b/i.test(c.message || '')).length;
+
+      const velocity   = Math.min(100, 30 + count * 3);
+      const craft      = Math.min(100, Math.round((quality / Math.max(1, count)) * 80 + count * 1.5));
+      const reliability = Math.min(100, days * 8);
+      const drive      = Math.min(100, repos * 25 + Math.min(50, count * 2));
+      const compass = { velocity, craft, reliability, drive };
+
+      const avg = (velocity + craft + reliability + drive) / 4;
+      const traffic_light = avg >= 70 ? 'green' : avg >= 40 ? 'yellow' : 'red';
+
+      // Recent handoffs in the last 7 days nudge handoff_mult toward 1.0.
+      let handoff_mult = 0.92;
+      if (Array.isArray(this.handoffs)) {
+        const cutoff = Date.now() - 7 * 86400 * 1000;
+        const recent = this.handoffs.filter(h => h && h.dev_email === email
+          && new Date(h.timestamp || h.date || 0).getTime() >= cutoff).length;
+        handoff_mult = Math.min(1.0, 0.85 + recent * 0.025);
+      }
+
+      const repoLabel = repos === 1 ? 'repo' : 'repos';
+      const summary = `${count} commits across ${repos} ${repoLabel} over the last 14 days.`;
+
+      return {
+        compass, handoff_mult, traffic_light,
+        items_closed: itemsClosed,
+        target: Math.max(5, Math.round(count * 0.5)),
+        summary, off_project_hours: 0, off_project_note: '',
+        commits, queue: [],
+        _isEmpty: false,
+      };
+    },
+
     get devs() {
       const projs = this.config.projects;
       return this.config.users.filter(u => u.role === 'dev' && u.status === 'active').map(u => {
-        const mock = this.devMockData[u.email] || this.emptyDev();
+        // Real-data path — if this user has any commits in state:commits in the
+        // last 14 days, derive their compass + traffic light from those.
+        // Otherwise fall back to devMockData (legacy hardcoded users) or emptyDev.
+        const real = this._activityFromCommits(u.email);
+        const mock = real || this.devMockData[u.email] || this.emptyDev();
         const ownedNames = projs.filter(p => p.owner_email === u.email).map(p => p.name);
         const contribNames = projs.filter(p => (p.contributor_emails || []).includes(u.email)).map(p => p.name);
         const projectNames = [...new Set([...ownedNames, ...contribNames])];
