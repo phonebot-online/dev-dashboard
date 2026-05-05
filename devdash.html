@@ -3314,10 +3314,13 @@ function devdash() {
       const quality = commits.filter(c => /^(test|refactor|fix|chore|docs)\b/i.test(c.message || '')).length;
       const itemsClosed = commits.filter(c => /^(feat|fix)\b/i.test(c.message || '')).length;
 
+      // Floors on reliability and drive so burst-committers and single-repo devs
+      // don't sink one axis of the radar to near-zero — keeps the chart shape
+      // readable for the boss while still rewarding consistency / breadth on top.
       const velocity   = Math.min(100, 30 + count * 3);
       const craft      = Math.min(100, Math.round((quality / Math.max(1, count)) * 80 + count * 1.5));
-      const reliability = Math.min(100, days * 8);
-      const drive      = Math.min(100, repos * 25 + Math.min(50, count * 2));
+      const reliability = Math.min(100, Math.max(50, days * 8));
+      const drive      = Math.min(100, Math.max(40, repos * 25 + Math.min(50, count * 2)));
       const compass = { velocity, craft, reliability, drive };
 
       const avg = (velocity + craft + reliability + drive) / 4;
