@@ -69,7 +69,7 @@ function parseAuthor(raw: string): { name: string; email: string } {
 export function parsePushEvent(payload: any, repoToProject: Record<string, string>): CanonicalCommit[] {
   if (!payload || typeof payload !== 'object') return [];
   const repoFullName = String(payload?.repository?.full_name || '').trim();
-  const project = repoToProject[repoFullName] || '';
+  const project = repoToProject[repoFullName] || repoToProject[repoFullName.toLowerCase()] || '';
 
   const out: CanonicalCommit[] = [];
   const seenShas = new Set<string>();

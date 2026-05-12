@@ -4,18 +4,11 @@ import { sendEmail, formatAlertEmail, AlertSnapshot } from './email';
 export interface Env {
   DASHBOARD_KV: KVNamespace;
   TOTP_ENCRYPTION_KEY: string;
-  // TODO: consolidate the two webhook secrets below — they're duplicates from
-  // parallel implementations on Mustafa + FAIZAN-DEV branches. Pick one
-  // canonical name (BITBUCKET_WEBHOOK_SECRET is more explicit) and drop the
-  // other in a follow-up PR. For now both coexist so neither implementation
-  // breaks; routes use whichever they know about.
-  //
-  // Faizan's /bitbucket/webhook + /live page (FAIZAN-DEV branch):
+  // Set via: npx wrangler secret put BITBUCKET_WEBHOOK_SECRET
+  // Must match the secret configured in Bitbucket → repo → Webhooks.
+  // WEBHOOK_SECRET is accepted as a legacy alias (Faizan's original name).
+  BITBUCKET_WEBHOOK_SECRET?: string;
   WEBHOOK_SECRET?: string;
-  // "clone" | "webhook" | "both". Defaults to "clone" when unset.
-  LIVE_FEED_MODE?: string;
-  // Mustafa's /api/bitbucket-hook + /api/state.commits (Mustafa branch):
-  BITBUCKET_WEBHOOK_SECRET: string;
 }
 
 export default {

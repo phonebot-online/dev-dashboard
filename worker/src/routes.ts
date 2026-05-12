@@ -86,21 +86,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (url.pathname === '/logout') {
     return handleLogout(req, env);
   }
-  if (url.pathname === '/bitbucket/webhook' && req.method === 'POST') {
-    return handleBitbucketWebhook(req, env);
+  // Both webhook URLs call the same unified handler.
+  if ((url.pathname === '/bitbucket/webhook' || url.pathname === '/api/bitbucket-hook') && req.method === 'POST') {
+    return handleBitbucketPush(req, env);
   }
   if (url.pathname === '/live' && req.method === 'GET') {
     return handleLiveFeed(req, env);
-  }
-
-  // Bitbucket webhook (Mustafa branch impl) — runs BEFORE the session check.
-  // Authenticated by HMAC-SHA256 signature on the request body.
-  // TODO: consolidate with Faizan's /bitbucket/webhook (line ~89). Both are
-  // signed Bitbucket-Cloud receivers; this one stores into state:commits +
-  // resolves repo→project, while Faizan's stores into events:list and feeds
-  // the /live page. Pick one canonical implementation in a follow-up PR.
-  if (url.pathname === '/api/bitbucket-hook' && req.method === 'POST') {
-    return handleApiBitbucketHook(req, env);
   }
 
   // All other routes require a valid session.
@@ -153,18 +144,25 @@ function jsonError(status: number, message: string): Response {
   return Response.json({ error: message }, { status });
 }
 
-// Mustafa-branch handler: stores into state:commits, used by /api/bitbucket-hook.
-// (Faizan's same-named handler below stores into events:list, used by /bitbucket/webhook.)
-async function handleApiBitbucketHook(req: Request, env: Env): Promise<Response> {
-  const sig = req.headers.get('X-Hub-Signature') || req.headers.get('x-hub-signature') || '';
+// Unified Bitbucket push handler — serves both /api/bitbucket-hook and /bitbucket/webhook.
+// Accepts BITBUCKET_WEBHOOK_SECRET (primary) or WEBHOOK_SECRET (legacy alias).
+// Writes to state:commits (dashboard compass/per-dev) AND events:list (/live page).
+async function handleBitbucketPush(req: Request, env: Env): Promise<Response> {
+  const secret = env.BITBUCKET_WEBHOOK_SECRET || env.WEBHOOK_SECRET;
+  if (!secret) {
+    return jsonError(503, 'webhook secret not configured — set BITBUCKET_WEBHOOK_SECRET via wrangler secret put');
+  }
+
   const body = await req.text();
-  if (!await verifySignature(body, sig, env.BITBUCKET_WEBHOOK_SECRET)) {
+  const sig = req.headers.get('X-Hub-Signature') || req.headers.get('x-hub-signature') || '';
+  if (!await verifyHmacSha256(secret, body, sig)) {
     return jsonError(401, 'invalid signature');
   }
-  let payload: unknown;
+
+  let payload: any;
   try { payload = JSON.parse(body); } catch { return jsonError(400, 'invalid JSON'); }
 
-  // Resolve repo full_name -> project name from the live config in KV.
+  // ── 1. Write to state:commits (feeds dashboard compass + per-dev sections) ──
   const cfgRaw = await env.DASHBOARD_KV.get('state:config');
   const cfg = cfgRaw ? safeJson(cfgRaw) : {};
   const repoToProject: Record<string, string> = {};
@@ -174,19 +172,52 @@ async function handleApiBitbucketHook(req: Request, env: Env): Promise<Response>
       if (slug) repoToProject[slug] = p.name;
     }
   }
-
   const incoming = parsePushEvent(payload, repoToProject);
-  if (!incoming.length) {
-    // Tag-only push, branch delete, force-push with no new commits, etc.
-    return new Response(null, { status: 204 });
+  let totalCommits = 0;
+  if (incoming.length > 0) {
+    const existingRaw = await env.DASHBOARD_KV.get('state:commits');
+    const existing = (existingRaw ? safeJson(existingRaw) : []) as CanonicalCommit[];
+    const mergedCommits = mergeCommits(existing, incoming);
+    await env.DASHBOARD_KV.put('state:commits', JSON.stringify(mergedCommits));
+    totalCommits = mergedCommits.length;
   }
 
-  const existingRaw = await env.DASHBOARD_KV.get('state:commits');
-  const existing = (existingRaw ? safeJson(existingRaw) : []) as CanonicalCommit[];
-  const merged = mergeCommits(existing, incoming);
-  await env.DASHBOARD_KV.put('state:commits', JSON.stringify(merged));
+  // ── 2. Write to events:list (feeds /live activity page) ──
+  const repoName: string = payload?.repository?.full_name || payload?.repository?.name || 'unknown';
+  const changes: any[] = payload?.push?.changes || [];
+  const receivedAt = new Date().toISOString();
+  const newEvents: LiveEvent[] = [];
+  for (const ch of changes) {
+    const branch: string = ch?.new?.name || ch?.old?.name || 'unknown';
+    for (const c of (ch?.commits || [])) {
+      newEvents.push({
+        sha: String(c?.hash || '').slice(0, 12),
+        author_name: String(c?.author?.user?.display_name || c?.author?.raw || 'unknown'),
+        author_email: extractEmail(String(c?.author?.raw || '')),
+        message: String(c?.message || '').split('\n')[0].slice(0, 240),
+        branch,
+        repo: repoName,
+        timestamp: String(c?.date || receivedAt),
+        received_at: receivedAt,
+      });
+    }
+  }
+  if (newEvents.length > 0) {
+    const rawEvents = await env.DASHBOARD_KV.get(EVENTS_KEY);
+    let existingEvents: LiveEvent[] = [];
+    if (rawEvents) { try { existingEvents = JSON.parse(rawEvents); } catch {} }
+    const seen = new Set<string>();
+    const mergedEvents: LiveEvent[] = [];
+    for (const e of [...newEvents, ...existingEvents]) {
+      if (seen.has(e.sha)) continue;
+      seen.add(e.sha);
+      mergedEvents.push(e);
+      if (mergedEvents.length >= EVENTS_MAX) break;
+    }
+    await env.DASHBOARD_KV.put(EVENTS_KEY, JSON.stringify(mergedEvents));
+  }
 
-  return Response.json({ accepted: incoming.length, total: merged.length });
+  return Response.json({ ok: true, accepted: incoming.length, events: newEvents.length, total: totalCommits });
 }
 
 function safeJson(s: string): unknown {
@@ -251,8 +282,6 @@ async function handleLogout(req: Request, env: Env): Promise<Response> {
 
 // ============================================================================
 // Bitbucket webhook + Live activity feed
-// Additive feature. Disabled when WEBHOOK_SECRET is unset.
-// Mode (LIVE_FEED_MODE): "clone" (default, rejects webhooks), "webhook", "both".
 // ============================================================================
 
 interface LiveEvent {
@@ -268,11 +297,6 @@ interface LiveEvent {
 
 const EVENTS_KEY = 'events:list';
 const EVENTS_MAX = 100;
-
-function liveFeedEnabled(env: Env): boolean {
-  const mode = (env.LIVE_FEED_MODE || 'clone').toLowerCase();
-  return mode === 'webhook' || mode === 'both';
-}
 
 async function verifyHmacSha256(secret: string, body: string, header: string): Promise<boolean> {
   // Bitbucket sends `X-Hub-Signature: sha256=<hex>`
@@ -293,109 +317,12 @@ async function verifyHmacSha256(secret: string, body: string, header: string): P
   return diff === 0;
 }
 
-async function handleBitbucketWebhook(req: Request, env: Env): Promise<Response> {
-  if (!liveFeedEnabled(env) || !env.WEBHOOK_SECRET) {
-    return new Response('Not Found', { status: 404 });
-  }
-
-  const body = await req.text();
-  const sig = req.headers.get('X-Hub-Signature') || '';
-  const ok = await verifyHmacSha256(env.WEBHOOK_SECRET, body, sig);
-  if (!ok) {
-    return new Response('Bad signature', { status: 401 });
-  }
-
-  let payload: any;
-  try { payload = JSON.parse(body); } catch { return new Response('Bad JSON', { status: 400 }); }
-
-  // Bitbucket "repo:push" payload shape: payload.push.changes[].commits[]
-  const repoName: string = payload?.repository?.full_name || payload?.repository?.name || 'unknown';
-  const changes: any[] = payload?.push?.changes || [];
-  const newEvents: LiveEvent[] = [];
-  const receivedAt = new Date().toISOString();
-
-  for (const ch of changes) {
-    const branch: string = ch?.new?.name || ch?.old?.name || 'unknown';
-    const commits: any[] = ch?.commits || [];
-    for (const c of commits) {
-      newEvents.push({
-        sha: String(c?.hash || '').slice(0, 12),
-        author_name: String(c?.author?.user?.display_name || c?.author?.raw || 'unknown'),
-        author_email: extractEmail(String(c?.author?.raw || '')),
-        message: String(c?.message || '').split('\n')[0].slice(0, 240),
-        branch,
-        repo: repoName,
-        timestamp: String(c?.date || receivedAt),
-        received_at: receivedAt,
-      });
-    }
-  }
-
-  if (newEvents.length === 0) {
-    return new Response(JSON.stringify({ ok: true, stored: 0 }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // Append to rolling window in KV. Read-modify-write is acceptable here:
-  // webhook arrival rate is low (one push at a time), KV eventual consistency
-  // is fine for an activity feed.
-  let existing: LiveEvent[] = [];
-  const raw = await env.DASHBOARD_KV.get(EVENTS_KEY);
-  if (raw) {
-    try { existing = JSON.parse(raw) as LiveEvent[]; } catch { existing = []; }
-  }
-  // Newest first, dedupe by sha
-  const seen = new Set<string>();
-  const merged: LiveEvent[] = [];
-  for (const e of [...newEvents, ...existing]) {
-    if (seen.has(e.sha)) continue;
-    seen.add(e.sha);
-    merged.push(e);
-    if (merged.length >= EVENTS_MAX) break;
-  }
-  await env.DASHBOARD_KV.put(EVENTS_KEY, JSON.stringify(merged));
-
-  // Dual-write: also populate state:commits so the main dashboard's per-developer
-  // sections show the same commits. Reads repo->project mapping from state:config
-  // (PM/CEO populates this in Settings -> Projects). Uses Mustafa's canonical
-  // parser to keep the shape compatible with /api/bitbucket-hook.
-  try {
-    const cfgRaw = await env.DASHBOARD_KV.get('state:config');
-    const cfg = cfgRaw ? safeJson(cfgRaw) : {};
-    const repoToProject: Record<string, string> = {};
-    for (const p of (cfg as any)?.projects || []) {
-      for (const r of (p?.repos || [])) {
-        const slug = String(r).replace(/^\//, '').trim();
-        if (slug) repoToProject[slug] = p.name;
-      }
-    }
-    const incoming = parsePushEvent(payload, repoToProject);
-    if (incoming.length > 0) {
-      const existingRaw = await env.DASHBOARD_KV.get('state:commits');
-      const existingCommits = (existingRaw ? safeJson(existingRaw) : []) as CanonicalCommit[];
-      const mergedCommits = mergeCommits(existingCommits, incoming);
-      await env.DASHBOARD_KV.put('state:commits', JSON.stringify(mergedCommits));
-    }
-  } catch (e) {
-    // Don't fail the webhook on dual-write errors — the /live page already has the data.
-    console.error('state:commits dual-write failed', e);
-  }
-
-  return new Response(JSON.stringify({ ok: true, stored: newEvents.length }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
 function extractEmail(raw: string): string {
   const m = raw.match(/<([^>]+)>/);
   return m ? m[1].toLowerCase() : '';
 }
 
 async function handleLiveFeed(req: Request, env: Env): Promise<Response> {
-  if (!liveFeedEnabled(env)) {
-    return new Response('Not Found', { status: 404 });
-  }
   const token = readSessionCookie(req);
   if (!token) return loginHtml();
   const session = await getSession(env.DASHBOARD_KV, token);
@@ -407,7 +334,7 @@ async function handleLiveFeed(req: Request, env: Env): Promise<Response> {
     try { events = JSON.parse(raw) as LiveEvent[]; } catch { events = []; }
   }
 
-  return new Response(renderLiveFeedHtml(events, session.email, env), {
+  return new Response(renderLiveFeedHtml(events, session.email), {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
 }
@@ -418,8 +345,7 @@ function escapeHtml(s: string): string {
   }[c] as string));
 }
 
-function renderLiveFeedHtml(events: LiveEvent[], email: string, env: Env): string {
-  const mode = (env.LIVE_FEED_MODE || 'clone').toLowerCase();
+function renderLiveFeedHtml(events: LiveEvent[], email: string): string {
   const rows = events.length === 0
     ? `<tr><td colspan="5" class="empty">No webhook events yet. Push a commit to a configured Bitbucket repo to populate this feed.</td></tr>`
     : events.map(e => `
@@ -465,7 +391,7 @@ function renderLiveFeedHtml(events: LiveEvent[], email: string, env: Env): strin
 <body>
 <header>
   <div>
-    <h1>Live activity <span class="badge">mode: ${escapeHtml(mode)}</span></h1>
+    <h1>Live activity</h1>
     <div class="sub">Real-time push events from Bitbucket. Last ${events.length} of ${EVENTS_MAX} max.</div>
   </div>
   <nav>
