@@ -36,3 +36,6 @@ worker/.bitbucket-webhook-secret-saved.txt
 worker/events_list.json
 worker/.tmp-*.json
 worker/*.bak
+
+# Private notes folder — never commit, never expose to devs via the repo
+_private-notes/

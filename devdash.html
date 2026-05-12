@@ -432,7 +432,7 @@
             </div>
             <div class="pl-6" style="border-left: 1px solid var(--border)">
               <div class="text-[10px] tracking-widest text-gray-400 uppercase">Days remaining</div>
-              <div class="font-semibold text-sm mt-1" style="color: var(--text)" x-text="config.projects.find(p => p.id === activeProject)?.days_remaining + 'd'"></div>
+              <div class="font-semibold text-sm mt-1" style="color: var(--text)" x-text="daysRemainingFor(config.projects.find(p => p.id === activeProject)) + 'd'"></div>
             </div>
           </div>
         </template>
@@ -556,7 +556,7 @@
                 <div class="progress-fill" :class="p.traffic_light === 'green' ? 'bg-emerald-400' : p.traffic_light === 'yellow' ? 'bg-amber-400' : 'bg-rose-400'" :style="'width:' + p.percent_complete + '%'"></div>
               </div>
               <div class="grid grid-cols-3 gap-2 text-xs">
-                <div><div class="text-gray-500">Days left</div><div class="font-medium" style="color: var(--text)" x-text="p.days_remaining + 'd'"></div></div>
+                <div><div class="text-gray-500">Days left</div><div class="font-medium" style="color: var(--text)" x-text="daysRemainingFor(p) + 'd'"></div></div>
                 <div><div class="text-gray-500">Work left</div><div class="font-medium" style="color: var(--text)" x-text="p.days_of_work_required + 'd'"></div></div>
                 <div><div class="text-gray-500">Forecast</div><div class="font-medium text-[10px]" style="color: var(--text)" x-text="p.forecast_launch"></div></div>
               </div>
@@ -697,7 +697,7 @@
                 <div class="progress-fill" :class="p.traffic_light === 'green' ? 'bg-emerald-400' : p.traffic_light === 'yellow' ? 'bg-amber-400' : 'bg-rose-400'" :style="'width:' + p.percent_complete + '%'"></div>
               </div>
               <div class="grid grid-cols-3 gap-2 text-xs">
-                <div><div class="text-gray-500">Days left</div><div class="font-medium" style="color: var(--text)" x-text="p.days_remaining + 'd'"></div></div>
+                <div><div class="text-gray-500">Days left</div><div class="font-medium" style="color: var(--text)" x-text="daysRemainingFor(p) + 'd'"></div></div>
                 <div><div class="text-gray-500">Work left</div><div class="font-medium" style="color: var(--text)" x-text="p.days_of_work_required + 'd'"></div></div>
                 <div><div class="text-gray-500">Forecast</div><div class="font-medium text-[10px]" style="color: var(--text)" x-text="p.forecast_launch"></div></div>
               </div>
@@ -2603,7 +2603,7 @@
                 <span>Kickoff: <span x-text="projectDetail().kickoff"></span></span>
                 <span>Deadline: <span x-text="projectDetail().deadline"></span></span>
                 <span>Forecast: <strong style="color: var(--accent)" x-text="projectDetail().forecast_launch"></strong></span>
-                <span x-text="projectDetail().days_remaining + 'd remaining / ' + projectDetail().days_of_work_required + 'd work left'"></span>
+                <span x-text="daysRemainingFor(projectDetail()) + 'd remaining / ' + projectDetail().days_of_work_required + 'd work left'"></span>
               </div>
             </div>
             <button @click="closeProjectDetail()" class="text-2xl" style="color: var(--text-muted)">✕</button>
@@ -3798,7 +3798,7 @@ function devdash() {
       // Build a structured context snapshot (no PII secrets, just structural data)
       const snapshot = {
         week_start: this.currentWeekStart(),
-        projects: this.config.projects.map(p => ({ id: p.id, name: p.name, traffic_light: p.traffic_light, percent_complete: p.percent_complete, days_remaining: p.days_remaining, forecast_launch: p.forecast_launch })),
+        projects: this.config.projects.map(p => ({ id: p.id, name: p.name, traffic_light: p.traffic_light, percent_complete: p.percent_complete, days_remaining: this.daysRemainingFor(p), forecast_launch: p.forecast_launch })),
         devs: this.devs.map(d => ({ name: d.displayName, compass: d.compass, handoff_mult: d.handoff_mult, off_project_hours: d.off_project_hours, items_closed: d.items_closed, summary: d.summary })),
         bugs_open: this.bugs.filter(b => b.status === 'open').length,
         bugs_high_open: this.bugs.filter(b => b.status === 'open' && b.severity === 'HIGH').length,
@@ -4566,6 +4566,17 @@ function devdash() {
       return [...list].sort((a, b) => this.strongDirections(b).length - this.strongDirections(a).length);
     },
 
+    // Days remaining is computed live from deadline - today instead of stored
+    // as a stale config field. Returns 0 for past deadlines so the dashboard
+    // never shows a negative countdown. Returns '—' for ongoing projects with
+    // no deadline.
+    daysRemainingFor(project) {
+      if (!project || !project.deadline) return '—';
+      const ms = new Date(project.deadline).getTime() - Date.now();
+      if (isNaN(ms)) return '—';
+      return Math.max(0, Math.ceil(ms / 86400000));
+    },
+
     // Ownership
     ownerName(project) { if (!project.owner_email) return '(unowned)'; const u = this.config.users.find(x => x.email === project.owner_email); return u ? u.displayName : '(unknown)'; },
     isOwnerOfActiveProject(dev) {
@@ -4588,39 +4599,69 @@ function devdash() {
       return this.devForProject(base, this.activeProject);
     },
     devForProject(dev, projectId) {
-      // Per-project view: synthesise a project-specific compass + filter commits, until real data is wired in.
+      // Per-project view: re-run the same scoring formula as _activityFromCommits
+      // but on commits filtered to this project. Drops the previous pseudo-random
+      // shift — the compass values shown when a project tab is selected are now
+      // derived purely from real commits whose `project` field equals the active
+      // project's name (set by the webhook from state:config.projects[].repos).
       const proj = this.config.projects.find(p => p.id === projectId);
       if (!proj) return dev;
-      const seed = [...(dev.email + projectId)].reduce((s, c) => s + c.charCodeAt(0), 0);
-      const shift = (k, mul) => Math.max(25, Math.min(95, k + ((seed * mul) % 51) - 25));
+
+      const projCommits = (this.commits || []).filter(c =>
+        c && c.author_email === dev.email && c.project === proj.name
+        && new Date(c.timestamp).getTime() >= Date.now() - 14 * 86400 * 1000
+      ).sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+
+      if (!projCommits.length) {
+        // Dev has no commits on this project in the last 14 days. Show empty state.
+        return {
+          ...dev,
+          compass: { velocity: 0, craft: 0, reliability: 0, drive: 0 },
+          handoff_mult: 0.85,
+          traffic_light: 'yellow',
+          items_closed: 0,
+          off_project_hours: 0,
+          commits: [{ sha: '—', message: 'No ' + proj.name + ' commits this week.', audited: false }],
+          summary: 'No ' + proj.name + ' work in the last 14 days.',
+          _isProjectScoped: true,
+          _projectName: proj.name,
+          _isEmpty: true,
+        };
+      }
+
+      const count = projCommits.length;
+      const days = new Set(projCommits.map(c => (c.timestamp || '').slice(0, 10))).size;
+      const repos = new Set(projCommits.map(c => c.repo).filter(Boolean)).size;
+      const quality = projCommits.filter(c => /^(test|refactor|fix|chore|docs)\b/i.test(c.message || '')).length;
+      const itemsClosed = projCommits.filter(c => /^(feat|fix)\b/i.test(c.message || '')).length;
+
+      // Same formulas as _activityFromCommits. Floors keep radar shape readable.
       const compass = {
-        velocity: shift(dev.compass.velocity, 3),
-        craft: shift(dev.compass.craft, 7),
-        reliability: shift(dev.compass.reliability, 13),
-        drive: shift(dev.compass.drive, 19),
+        velocity:    Math.min(100, 30 + count * 3),
+        craft:       Math.min(100, Math.round((quality / Math.max(1, count)) * 80 + count * 1.5)),
+        reliability: Math.min(100, Math.max(50, days * 8)),
+        drive:       Math.min(100, Math.max(40, repos * 25 + Math.min(50, count * 2))),
       };
-      const handoff_mult = Math.max(0.86, Math.min(1.0, dev.handoff_mult + ((seed * 23) % 10 - 5) / 100));
-      // Filter commits by rough project-prefix match (real data will have project_id per commit).
-      const prefixes = { pb2: ['R0', 'P0', 'P1', 'P2', 'order', 'Order', 'payment', 'checkout'], hq: ['HQ', 'WhatsApp', 'staff'], ppr: ['PPR', 'variant', 'A/B', 'PDP'], mob: ['Mobile', 'mobile', 'iOS', 'Android', 'app'], leg: ['legacy', 'Legacy', 'patch'] };
-      const pfx = prefixes[projectId] || [];
-      // Prefer real commits (filtered by project resolved at webhook time);
-      // fall back to message-prefix matching against synthetic commits.
-      const realByProject = this.commitsForDev(dev.email).filter(c => c.project === proj.name);
-      const commits = realByProject.length
-        ? realByProject
-        : (dev.commits || []).filter(c => pfx.some(p => c.message.includes(p)));
-      const items_closed = Math.max(0, Math.round(dev.items_closed * (0.4 + (seed % 7) * 0.1)));
-      const off_project_hours = proj.id === 'leg' ? dev.off_project_hours : Math.round(dev.off_project_hours * 0.3);
+
+      const avg = (compass.velocity + compass.craft + compass.reliability + compass.drive) / 4;
+      const traffic_light = avg >= 70 ? 'green' : avg >= 40 ? 'yellow' : 'red';
+
+      const repoLabel = repos === 1 ? 'repo' : 'repos';
+      const summary = 'On ' + proj.name + ': ' + count + ' commits across ' + repos + ' ' + repoLabel + ' over the last 14 days.';
+
       return {
         ...dev,
         compass,
-        handoff_mult,
-        commits: commits.length ? commits : [{ sha: '—', message: 'No ' + proj.name + ' commits this week.', audited: false }],
-        items_closed,
-        off_project_hours,
-        summary: 'On ' + proj.name + ': ' + (commits.length ? commits.length + ' commits, ' + items_closed + ' items closed.' : 'no commits this week.') + ' (Compass below is project-scoped.)',
+        handoff_mult: dev.handoff_mult,
+        traffic_light,
+        commits: projCommits,
+        items_closed: itemsClosed,
+        target: Math.max(5, Math.round(count * 0.5)),
+        off_project_hours: 0,
+        summary,
         _isProjectScoped: true,
         _projectName: proj.name,
+        _isEmpty: false,
       };
     },
     viewDev(email) { this.devViewSelected = email; this.activeRoleTab = 'dev'; },
@@ -4907,7 +4948,7 @@ function devdash() {
       if (scoped && proj) {
         const lightLabel = proj.traffic_light === 'red' ? 'behind' : proj.traffic_light === 'yellow' ? 'at risk' : 'on track';
         const lightColour = proj.traffic_light === 'red' ? '#f87171' : proj.traffic_light === 'yellow' ? 'var(--accent)' : '#4ade80';
-        lead = `☕  On <strong style="color: var(--accent)">${this._esc(proj.name)}</strong> — <span style="color: ${lightColour}">${lightLabel}</span> at <strong>${Number(proj.percent_complete) || 0}%</strong> · forecast <strong>${this._esc(proj.forecast_launch)}</strong> · ${Number(proj.days_remaining) || 0}d remaining.`;
+        lead = `☕  On <strong style="color: var(--accent)">${this._esc(proj.name)}</strong> — <span style="color: ${lightColour}">${lightLabel}</span> at <strong>${Number(proj.percent_complete) || 0}%</strong> · forecast <strong>${this._esc(proj.forecast_launch)}</strong> · ${this.daysRemainingFor(proj)}d remaining.`;
       } else if (r > 0) {
         lead = `☕  Three things on the table today — starting with <strong class="text-rose-400">${this._esc(behindProjects[0]?.name || 'the red one')}</strong>.`;
       } else if (y > 0) {

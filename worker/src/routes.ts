@@ -328,10 +328,30 @@ async function handleLiveFeed(req: Request, env: Env): Promise<Response> {
   const session = await getSession(env.DASHBOARD_KV, token);
   if (!session) return loginHtml();
 
+  // Read from state:commits — same source as the main dashboard. This way
+  // /live shows commits regardless of whether they arrived via webhook or
+  // were backfilled from local clones. CanonicalCommit shape has the same
+  // fields the renderer needs (sha, author_email, message, branch, repo,
+  // timestamp), so cast through LiveEvent for the existing renderer.
   let events: LiveEvent[] = [];
-  const raw = await env.DASHBOARD_KV.get(EVENTS_KEY);
+  const raw = await env.DASHBOARD_KV.get('state:commits');
   if (raw) {
-    try { events = JSON.parse(raw) as LiveEvent[]; } catch { events = []; }
+    try {
+      const commits = JSON.parse(raw) as Array<{
+        sha?: string; author_email?: string; author_name?: string;
+        message?: string; branch?: string; repo?: string; timestamp?: string;
+      }>;
+      events = commits.slice(0, 100).map(c => ({
+        sha: (c.sha || '').slice(0, 12),
+        author_email: c.author_email || '',
+        author_name: c.author_name || '',
+        message: (c.message || '').split('\n')[0].slice(0, 240),
+        branch: c.branch || '',
+        repo: c.repo || '',
+        timestamp: c.timestamp || '',
+        received_at: c.timestamp || '',
+      }));
+    } catch { events = []; }
   }
 
   return new Response(renderLiveFeedHtml(events, session.email), {
@@ -347,7 +367,7 @@ function escapeHtml(s: string): string {
 
 function renderLiveFeedHtml(events: LiveEvent[], email: string): string {
   const rows = events.length === 0
-    ? `<tr><td colspan="5" class="empty">No webhook events yet. Push a commit to a configured Bitbucket repo to populate this feed.</td></tr>`
+    ? `<tr><td colspan="5" class="empty">No commits yet. Push a commit or run the backfill script to populate this feed.</td></tr>`
     : events.map(e => `
       <tr>
         <td class="ts">${escapeHtml(e.timestamp.slice(0, 19).replace('T', ' '))}</td>
@@ -392,7 +412,7 @@ function renderLiveFeedHtml(events: LiveEvent[], email: string): string {
 <header>
   <div>
     <h1>Live activity</h1>
-    <div class="sub">Real-time push events from Bitbucket. Last ${events.length} of ${EVENTS_MAX} max.</div>
+    <div class="sub">Recent commits from all configured repos. Showing ${events.length} entries.</div>
   </div>
   <nav>
     <a href="/">Audit dashboard</a>
