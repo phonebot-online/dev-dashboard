@@ -1690,6 +1690,60 @@
     <!-- QA AUDITOR VIEW                                 -->
     <!-- ============================================== -->
     <div x-show="activeRoleTab === 'qa_auditor'" class="fade-in space-y-6">
+
+      <!-- PM Agent -->
+      <div class="card p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div class="text-xs uppercase tracking-wider text-gray-400">PM Agent</div>
+            <div class="text-[11px] text-gray-500 mt-0.5">Ask questions about developer commits to verify feature completion</div>
+          </div>
+          <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded" style="background: var(--accent-dim); color: var(--accent)">AI</span>
+        </div>
+        <div class="grid md:grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Developer (optional)</label>
+            <select x-model="pmAgent.devEmail">
+              <option value="">All developers</option>
+              <template x-for="u in config.users.filter(x => x.role === 'dev' && x.status === 'active')" :key="u.email">
+                <option :value="u.email" x-text="u.displayName"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Project (optional)</label>
+            <select x-model="pmAgent.project">
+              <option value="">All projects</option>
+              <template x-for="p in config.projects" :key="p.id">
+                <option :value="p.name" x-text="p.name"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Your question</label>
+          <textarea x-model="pmAgent.prompt" rows="3" placeholder="e.g. Has the checkout flow been completed? What's left on the auth module? Is the payment integration done?"></textarea>
+        </div>
+        <div class="flex justify-end mb-3">
+          <button @click="askPmAgent()" :disabled="pmAgent.loading || !pmAgent.prompt.trim()" class="primary">
+            <span x-show="!pmAgent.loading">Ask Agent</span>
+            <span x-show="pmAgent.loading">Analysing commits…</span>
+          </button>
+        </div>
+        <template x-if="pmAgent.error">
+          <div class="text-xs p-3 rounded" style="background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); color: #f87171" x-text="pmAgent.error"></div>
+        </template>
+        <template x-if="pmAgent.response">
+          <div class="rounded p-4" style="background: var(--card-hover); border: 1px solid var(--border)">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded" style="background: var(--accent-dim); color: var(--accent)">Agent response</span>
+              <span class="text-[10px] text-gray-500" x-text="pmAgent.commitCount + ' commits analysed'"></span>
+            </div>
+            <div class="text-xs whitespace-pre-wrap leading-relaxed" style="color: var(--text)" x-text="pmAgent.response"></div>
+          </div>
+        </template>
+      </div>
+
       <div class="card p-5">
         <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">New audit finding</div>
         <div class="grid md:grid-cols-3 gap-3">
@@ -3280,6 +3334,7 @@ function devdash() {
     currentQuote: { text: '', attr: '' },
     newBug: { summary: '', project: 'Phonebot 2.0', severity: 'HIGH', details: '', device: 'desktop', browser: 'chrome', url: '', reproducible: 'always', steps: '', expected_actual: '', attachments: [] },
     newAudit: { title: '', project: 'Phonebot 2.0', findings: '', category: 'performance', severity: 'high', url: '', metric: 'LCP (s)', actual: '', target: '', device: 'iPhone 14', viewport: '', browser: 'Chrome', file: '', issue_type: 'Complexity', lines: '', owasp: 'A01: Broken access control', risk: 'Medium', assigned_to: '', cc: [] },
+    pmAgent: { prompt: '', devEmail: '', project: '', loading: false, response: null, error: null, commitCount: 0 },
     auditCategoryFilter: 'all',
     auditStatusFilter: 'all',
     bugStatusFilter: 'all',
@@ -5380,6 +5435,34 @@ function devdash() {
       });
       this.save('bugs');
       this.newBug = { summary: '', project: 'Phonebot 2.0', severity: 'HIGH', details: '', device: 'desktop', browser: 'chrome', url: '', reproducible: 'always', steps: '', expected_actual: '', attachments: [] };
+    },
+    async askPmAgent() {
+      if (!this.pmAgent.prompt.trim() || this.pmAgent.loading) return;
+      this.pmAgent.loading = true;
+      this.pmAgent.response = null;
+      this.pmAgent.error = null;
+      try {
+        const res = await fetch('/api/pm-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: this.pmAgent.prompt,
+            ...(this.pmAgent.devEmail && { devEmail: this.pmAgent.devEmail }),
+            ...(this.pmAgent.project && { project: this.pmAgent.project }),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.pmAgent.error = data.error || 'Agent unavailable.';
+        } else {
+          this.pmAgent.response = data.answer;
+          this.pmAgent.commitCount = data.commitCount;
+        }
+      } catch {
+        this.pmAgent.error = 'Network error — could not reach the agent.';
+      } finally {
+        this.pmAgent.loading = false;
+      }
     },
     submitAudit() {
       if (!this._guard('submitAudit')) return;

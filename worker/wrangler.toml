@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 # Serve on the free workers.dev subdomain (e.g. devdash.<account>.workers.dev).
 # Flip this to false and uncomment the [[routes]] block below once you have
 # access to the phonebot.co.uk zone.
-workers_dev = true
+workers_dev = false
 
 # Bundle devdash.html (one level up) as a text import so routes.ts can inject
 # the authenticated session and serve it as the SPA shell.
@@ -19,11 +19,9 @@ fallthrough = true
 binding = "DASHBOARD_KV"
 id = "e5195c92099746d097c0b98caa81e9ef"
 
-# Custom-domain route — re-enable once phonebot.co.uk DNS access is available
-# and set workers_dev = false above.
-# [[routes]]
-# pattern = "devdash.phonebot.co.uk/*"
-# zone_name = "phonebot.co.uk"
+[[routes]]
+pattern = "devdash.phonebot.ae/*"
+zone_name = "phonebot.ae"
 
 # Daily cron at 13:00 UTC (~midnight AWST / 6am PKT / 11pm UK the day before)
 [triggers]
