@@ -9,6 +9,7 @@ export interface Env {
   // WEBHOOK_SECRET is accepted as a legacy alias (Faizan's original name).
   BITBUCKET_WEBHOOK_SECRET?: string;
   WEBHOOK_SECRET?: string;
+  CLAUDE_API_KEY?: string;
 }
 
 export default {

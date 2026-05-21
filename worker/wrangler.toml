@@ -19,11 +19,12 @@ fallthrough = true
 binding = "DASHBOARD_KV"
 id = "e5195c92099746d097c0b98caa81e9ef"
 
-# Custom-domain route — re-enable once phonebot.co.uk DNS access is available
-# and set workers_dev = false above.
+# Custom-domain route — managed manually in Cloudflare dashboard (wrangler
+# cannot assign it from this machine as the phonebot.ae zone is on a different
+# Cloudflare account login).
 # [[routes]]
-# pattern = "devdash.phonebot.co.uk/*"
-# zone_name = "phonebot.co.uk"
+# pattern = "devdash.phonebot.ae/*"
+# zone_name = "phonebot.ae"
 
 # Daily cron at 13:00 UTC (~midnight AWST / 6am PKT / 11pm UK the day before)
 [triggers]

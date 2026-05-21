@@ -131,6 +131,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return jsonError(405, 'method not allowed');
   }
 
+  if (url.pathname === '/api/pm-agent' && req.method === 'POST') {
+    return handlePmAgent(req, env, session);
+  }
+
   // Default: serve the SPA with the authenticated session injected.
   return new Response(renderSpa(session.email, session.role), {
     headers: {
@@ -429,4 +433,115 @@ function renderLiveFeedHtml(events: LiveEvent[], email: string): string {
 <p class="meta">Events arrive via Bitbucket webhook, signed with HMAC-SHA256. The main dashboard runs independently and shows the same commits under each developer's section.</p>
 </body>
 </html>`;
+}
+
+// ============================================================================
+// PM Agent — commit-aware Claude Q&A for QA Auditor / PM / CEO
+// ============================================================================
+
+interface PmAgentRequest {
+  prompt: string;
+  devEmail?: string;
+  project?: string;
+}
+
+async function handlePmAgent(
+  req: Request,
+  env: Env,
+  session: { email: string; role: string },
+): Promise<Response> {
+  if (!['pm', 'ceo', 'qa_auditor'].includes(session.role)) {
+    return jsonError(403, 'insufficient role');
+  }
+  if (!env.CLAUDE_API_KEY) {
+    return jsonError(503, 'AI not configured — set CLAUDE_API_KEY secret');
+  }
+
+  let body: PmAgentRequest;
+  try { body = await req.json() as PmAgentRequest; } catch {
+    return jsonError(400, 'invalid JSON');
+  }
+  const { prompt, devEmail, project } = body;
+  if (!prompt?.trim()) return jsonError(400, 'prompt is required');
+
+  const [rawCommits, rawConfig] = await Promise.all([
+    env.DASHBOARD_KV.get('state:commits'),
+    env.DASHBOARD_KV.get('state:config'),
+  ]);
+
+  let commits: CanonicalCommit[] = [];
+  if (rawCommits) { try { commits = JSON.parse(rawCommits); } catch {} }
+
+  let config: {
+    users?: Array<{ displayName: string; email: string; role: string }>;
+    projects?: Array<{ name: string; deadline?: string }>;
+  } = {};
+  if (rawConfig) { try { config = JSON.parse(rawConfig); } catch {} }
+
+  let filtered = commits;
+  if (devEmail) filtered = filtered.filter(c => c.author_email === devEmail);
+  if (project) filtered = filtered.filter(c => c.project === project);
+
+  const limited = filtered.slice(0, 300);
+
+  const commitLines = limited.length > 0
+    ? limited.map(c =>
+        `[${c.timestamp.slice(0, 10)}] ${c.author_name} (${c.author_email}) · ${c.project || 'unknown'} · ${c.message}${c.audited ? ' ✓audited' : ''}`
+      ).join('\n')
+    : '(no commits found for this filter)';
+
+  const userList = (config.users || [])
+    .map(u => `${u.displayName} <${u.email}> — ${u.role}`)
+    .join('\n');
+
+  const projectList = (config.projects || [])
+    .map(p => `${p.name}${p.deadline ? ' (deadline: ' + p.deadline + ')' : ''}`)
+    .join('\n');
+
+  const system = `You are a Project Manager AI agent for the Phonebot software team. You analyse git commit messages to assess feature and deliverable completion.
+
+When asked about a feature, module, or deliverable:
+1. Scan the commit messages for evidence of that work being done
+2. Give a clear verdict: ✅ Complete · ⚠️ Partially complete · ❌ Not started · ❓ Unclear
+3. Quote the 2–4 most relevant commit messages as evidence
+4. State what appears to be missing or incomplete if applicable
+5. Keep the response concise — this is displayed inline in a dashboard
+
+Team:
+${userList || 'not available'}
+
+Projects:
+${projectList || 'not available'}`;
+
+  const filterNote = [
+    devEmail ? `developer: ${devEmail}` : '',
+    project ? `project: ${project}` : '',
+  ].filter(Boolean).join(', ');
+
+  const userMessage = `${filterNote ? `Commits filtered to ${filterNote}.\n\n` : ''}Commit history (${limited.length} commits):\n${commitLines}\n\n---\n\nQuestion: ${prompt}`;
+
+  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.CLAUDE_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  });
+
+  if (!claudeRes.ok) {
+    console.error('Claude API error:', await claudeRes.text());
+    return jsonError(502, 'AI service error');
+  }
+
+  const data = await claudeRes.json() as { content?: Array<{ text: string }> };
+  const answer = data.content?.[0]?.text ?? '';
+
+  return Response.json({ answer, commitCount: limited.length });
 }
