@@ -37,5 +37,9 @@ worker/events_list.json
 worker/.tmp-*.json
 worker/*.bak
 
+# TOTP provisioning artifacts — never commit
+worker/.master-key.txt
+worker/qrcodes/
+
 # Private notes folder — never commit, never expose to devs via the repo
 _private-notes/
