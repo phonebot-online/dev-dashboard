@@ -2274,7 +2274,7 @@
         <!-- Full data reset for go-live (clears every devdash_* localStorage key, including bugs/audits/rewards/etc). -->
         <div class="card p-5" style="border-color: rgba(248,113,113,0.5)">
           <div class="text-xs uppercase tracking-wider mb-2" style="color: #f87171">Go-live wipe</div>
-          <div class="text-[11px] mb-3" style="color: var(--text-muted)">Wipes <strong>every</strong> dashboard storage key in this browser: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, off-project mock data, sessions, theme, density, provisioning flags. Use ONCE before going live to clear demo seeds. Two confirms required.</div>
+          <div class="text-[11px] mb-3" style="color: var(--text-muted)">Wipes <strong>every</strong> dashboard storage key in this browser: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, off-project hours, sessions, theme, density, provisioning flags. Use ONCE before going live to clear demo seeds. Two confirms required.</div>
           <button @click="resetAllDashboardData()" class="danger">Wipe all dashboard data (go-live)</button>
         </div>
         <div class="text-[11px] text-center py-2" style="color: var(--text-fade)">✓ System changes save automatically</div>
@@ -3256,6 +3256,7 @@ function devdash() {
     handoffs: [], // [{id, dev_email, date, project, closed[], in_progress, open, off_project, off_project_hours, created_at}]
     handoffDraft: { project: '', closed: '', in_progress: '', open: '', off_project: '', off_project_hours: 0 },
     commits: [], // CanonicalCommit[] — populated by /api/bitbucket-hook via /api/state. NEVER written from the SPA.
+    offProject: [], // [{id, dev_email, hours, note, status, week_start, created_at}] — server-backed off-project log (GAP-3)
     pendingQrEmail: '',
     showProjectDetail: false, activeProjectDetailId: null, projectDetailEdit: false,
     showDecisionsModal: false, newBlocker: { title: '', waiting_on: 'Fahad', project: '' },
@@ -3480,6 +3481,20 @@ function devdash() {
       };
     },
 
+    // GAP-3 — sum a developer's off-project hours for the CURRENT week from the
+    // server-backed offProject collection. Returns { hours, note }. note is the
+    // most-recent matching entry's note (sorted by created_at desc) so it does
+    // not depend on array insertion order.
+    offProjectForDev(email) {
+      if (!email || !Array.isArray(this.offProject)) return { hours: 0, note: '' };
+      const wk = this.currentWeekStart();
+      const mine = this.offProject.filter(e => e && e.dev_email === email && e.week_start === wk);
+      if (!mine.length) return { hours: 0, note: '' };
+      const hours = mine.reduce((s, e) => s + (Number(e.hours) || 0), 0);
+      const newest = mine.slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+      return { hours, note: (newest && newest.note) || '' };
+    },
+
     get devs() {
       const projs = this.config.projects;
       return this.config.users.filter(u => u.role === 'dev' && u.status === 'active').map(u => {
@@ -3491,7 +3506,11 @@ function devdash() {
         const ownedNames = projs.filter(p => p.owner_email === u.email).map(p => p.name);
         const contribNames = projs.filter(p => (p.contributor_emails || []).includes(u.email)).map(p => p.name);
         const projectNames = [...new Set([...ownedNames, ...contribNames])];
-        return { ...u, ...mock, projects: projectNames };
+        // GAP-3 — off-project hours come from the server-backed offProject
+        // collection, overriding whatever mock/devMockData carried (placed
+        // after ...mock so the collection value wins).
+        const op = this.offProjectForDev(u.email);
+        return { ...u, ...mock, projects: projectNames, off_project_hours: op.hours, off_project_note: op.note };
       });
     },
 
@@ -3643,7 +3662,7 @@ function devdash() {
       }
       const defaultConfig = JSON.parse(JSON.stringify(this.config));
       this.corruptStorageKeys = [];
-      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','aiInsightsCache','devMockData'].forEach(key => {
+      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','offProject','aiInsightsCache','devMockData'].forEach(key => {
         const s = localStorage.getItem('devdash_' + key);
         // L11 FIX — don't silently swallow corrupt keys; log + surface to user so months of data don't vanish unnoticed
         if (s) {
@@ -3809,7 +3828,7 @@ function devdash() {
     // Full data wipe for go-live. Clears every devdash_* key in this browser
     // AND wipes server-side shared state via /api/state/_wipe (when authenticated).
     async resetAllDashboardData() {
-      if (!confirm('Wipe ALL dashboard data — for THE WHOLE TEAM?\n\nThis will delete: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, AND your local session/theme/density/TOTP provisioning flags.\n\nThis affects every user when running on the deployed Worker. Use ONCE before going live to clear demo seeds. Irreversible.\n\nContinue?')) return;
+      if (!confirm('Wipe ALL dashboard data — for THE WHOLE TEAM?\n\nThis will delete: bugs, audits, feature requests, disputes, blockers, stuck PRs, regressions, reward events, payout batches, audit log, clock entries, growth log, PM assessments, off-project hours, AND your local session/theme/density/TOTP provisioning flags.\n\nThis affects every user when running on the deployed Worker. Use ONCE before going live to clear demo seeds. Irreversible.\n\nContinue?')) return;
       if (!confirm('Second confirm — really wipe ALL shared dashboard data for the entire team?')) return;
       if (typeof window !== 'undefined' && window.__SESSION__) {
         try {
@@ -3949,6 +3968,7 @@ function devdash() {
         payoutBatches: this.payoutBatches,
         growthLog: this.growthLog,
         auditLog: this.auditLog,
+        offProject: this.offProject,
       };
       const json = JSON.stringify(payload, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
@@ -4013,7 +4033,7 @@ function devdash() {
     _STATE_COLLECTIONS: new Set([
       'bugs','auditFindings','featureRequests','disputes','blockers','stuckPrs',
       'regressionCandidates','rewardEvents','payoutBatches','pmAssessments',
-      'clockEntries','growthLog','auditLog','handoffs','commits','config',
+      'clockEntries','growthLog','auditLog','handoffs','offProject','commits','config',
     ]),
     _READONLY_COLLECTIONS: new Set(['commits']),
     storageFull: false, _storageWarnedOnce: false, corruptStorageKeys: [],
@@ -4022,7 +4042,7 @@ function devdash() {
     nextId() {
       if (!this._idCounter) {
         const ids = [];
-        for (const arr of [this.bugs, this.auditFindings, this.featureRequests, this.disputes, this.blockers, this.stuckPrs, this.regressionCandidates, this.pmAssessments, this.rewardEvents, this.payoutBatches, this.auditLog]) {
+        for (const arr of [this.bugs, this.auditFindings, this.featureRequests, this.disputes, this.blockers, this.stuckPrs, this.regressionCandidates, this.pmAssessments, this.rewardEvents, this.payoutBatches, this.auditLog, this.offProject]) {
           if (Array.isArray(arr)) for (const x of arr) if (x && typeof x.id === 'number') ids.push(x.id);
         }
         this._idCounter = ids.length ? Math.max(...ids) : Date.now();
@@ -4706,7 +4726,8 @@ function devdash() {
           handoff_mult: 0.85,
           traffic_light: 'yellow',
           items_closed: 0,
-          off_project_hours: 0,
+          off_project_hours: dev.off_project_hours || 0,
+          off_project_note: dev.off_project_note || '',
           commits: [{ sha: '—', message: 'No ' + proj.name + ' commits this week.', audited: false }],
           summary: 'No ' + proj.name + ' work in the last 14 days.',
           _isProjectScoped: true,
@@ -4743,7 +4764,8 @@ function devdash() {
         commits: projCommits,
         items_closed: itemsClosed,
         target: Math.max(5, Math.round(count * 0.5)),
-        off_project_hours: 0,
+        off_project_hours: dev.off_project_hours || 0,
+        off_project_note: dev.off_project_note || '',
         summary,
         _isProjectScoped: true,
         _projectName: proj.name,
@@ -5620,14 +5642,23 @@ function devdash() {
         alert('Hours must be a positive number (e.g. 2 or 0.5). Got: "' + this.newOffProject.hours + '"');
         return;
       }
-      // I06 FIX — fallback: if dev isn't in seed mock, initialise a record on the fly so their hours count
       const email = this.currentUser?.email;
       if (!email) return;
-      if (!this.devMockData[email]) this.devMockData[email] = this.emptyDev();
-      this.devMockData[email].off_project_hours = (this.devMockData[email].off_project_hours || 0) + h;
-      this.devMockData[email].off_project_note = this.newOffProject.description + ' (' + this.newOffProject.status + ')';
-      // C2 FIX — persist devMockData so off-project hours survive reload
-      this.save('devMockData');
+      // GAP-3 — write to the server-backed offProject collection instead of
+      // per-browser devMockData, so PM/CEO see the same data. Each entry is
+      // week-stamped (week_start) so offProjectForDev() can scope to the
+      // current week, and carries a stable id from nextId().
+      if (!Array.isArray(this.offProject)) this.offProject = [];
+      this.offProject.unshift({
+        id: this.nextId(),
+        dev_email: email,
+        hours: h,
+        note: this.newOffProject.description + ' (' + this.newOffProject.status + ')',
+        status: this.newOffProject.status,
+        week_start: this.currentWeekStart(),
+        created_at: new Date().toISOString(),
+      });
+      this.save('offProject');
       this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Off-project', change: `Logged ${this.newOffProject.hours}h — ${this.newOffProject.description}` });
       this.save('auditLog');
       this.newOffProject = { description: '', hours: '', status: 'done' };

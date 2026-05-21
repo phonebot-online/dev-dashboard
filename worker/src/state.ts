@@ -17,6 +17,7 @@ export const COLLECTIONS = [
   'growthLog',
   'auditLog',
   'handoffs',
+  'offProject',
   'commits',
   'config',
 ] as const;
