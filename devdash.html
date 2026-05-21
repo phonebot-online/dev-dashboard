@@ -379,7 +379,7 @@
     <button @click="activeProject = 'all'" class="proj-btn" :class="{'active': activeProject === 'all'}">All Projects (<span x-text="config.projects.length"></span>)</button>
     <template x-for="p in config.projects" :key="p.id">
       <button @click="activeProject = p.id" class="proj-btn flex items-center gap-2" :class="{'active': activeProject === p.id}">
-        <span class="dot" :class="'dot-' + p.traffic_light"></span>
+        <span class="dot" :class="'dot-' + projectTrafficLight(p)"></span>
         <span x-text="p.name"></span>
       </button>
     </template>
@@ -398,9 +398,9 @@
             <div>
               <div class="text-[10px] tracking-widest text-gray-400 uppercase">Portfolio health</div>
               <div class="text-sm mt-1 flex items-center gap-3" style="color: var(--text)">
-                <span class="flex items-center gap-1"><span class="dot dot-green"></span><span class="font-semibold" x-text="config.projects.filter(p => p.traffic_light === 'green').length"></span> on track</span>
-                <span class="flex items-center gap-1"><span class="dot dot-yellow"></span><span class="font-semibold" x-text="config.projects.filter(p => p.traffic_light === 'yellow').length"></span> at risk</span>
-                <span class="flex items-center gap-1"><span class="dot dot-red"></span><span class="font-semibold" x-text="config.projects.filter(p => p.traffic_light === 'red').length"></span> behind</span>
+                <span class="flex items-center gap-1"><span class="dot dot-green"></span><span class="font-semibold" x-text="config.projects.filter(p => projectTrafficLight(p) === 'green').length"></span> on track</span>
+                <span class="flex items-center gap-1"><span class="dot dot-yellow"></span><span class="font-semibold" x-text="config.projects.filter(p => projectTrafficLight(p) === 'yellow').length"></span> at risk</span>
+                <span class="flex items-center gap-1"><span class="dot dot-red"></span><span class="font-semibold" x-text="config.projects.filter(p => projectTrafficLight(p) === 'red').length"></span> behind</span>
                 <span class="text-gray-500">of <span x-text="config.projects.length"></span> projects</span>
               </div>
             </div>
@@ -418,10 +418,10 @@
             <div>
               <div class="text-[10px] tracking-widest text-gray-400 uppercase">Status</div>
               <div class="text-sm mt-1 flex items-center gap-2" style="color: var(--text)">
-                <span class="dot" :class="'dot-' + (config.projects.find(p => p.id === activeProject)?.traffic_light || 'green')"></span>
+                <span class="dot" :class="'dot-' + projectTrafficLight(config.projects.find(p => p.id === activeProject))"></span>
                 <span class="font-semibold" x-text="config.projects.find(p => p.id === activeProject)?.name"></span>
                 <span class="text-gray-500">·</span>
-                <span x-text="(config.projects.find(p => p.id === activeProject)?.percent_complete || 0) + '% complete'"></span>
+                <span x-text="projectPercentComplete(config.projects.find(p => p.id === activeProject)) + '% complete'"></span>
               </div>
             </div>
             <div class="pl-6" style="border-left: 1px solid var(--border)">
@@ -543,17 +543,17 @@
                   </div>
                   <div class="text-xs" style="color: var(--text-muted)" x-text="p.summary"></div>
                 </div>
-                <div class="dot mt-1 ml-2 flex-shrink-0" :class="'dot-' + p.traffic_light"></div>
+                <div class="dot mt-1 ml-2 flex-shrink-0" :class="'dot-' + projectTrafficLight(p)"></div>
               </div>
               <div class="flex items-baseline gap-2 mb-3">
-                <div class="text-2xl font-bold" style="color: var(--text)" x-text="p.percent_complete + '%'"></div>
+                <div class="text-2xl font-bold" style="color: var(--text)" x-text="projectPercentComplete(p) + '%'"></div>
                 <div class="text-xs text-gray-500">complete</div>
                 <template x-if="(p.readiness || []).length">
                   <div class="ml-auto text-[10px] text-gray-500">Readiness: <span style="color: var(--accent)" x-text="readinessPct(p) + '%'"></span></div>
                 </template>
               </div>
               <div class="progress-track mb-3">
-                <div class="progress-fill" :class="p.traffic_light === 'green' ? 'bg-emerald-400' : p.traffic_light === 'yellow' ? 'bg-amber-400' : 'bg-rose-400'" :style="'width:' + p.percent_complete + '%'"></div>
+                <div class="progress-fill" :class="(l => l === 'green' ? 'bg-emerald-400' : l === 'yellow' ? 'bg-amber-400' : 'bg-rose-400')(projectTrafficLight(p))" :style="'width:' + projectPercentComplete(p) + '%'"></div>
               </div>
               <div class="grid grid-cols-3 gap-2 text-xs">
                 <div><div class="text-gray-500">Days left</div><div class="font-medium" style="color: var(--text)" x-text="daysRemainingFor(p) + 'd'"></div></div>
@@ -684,17 +684,17 @@
                   </div>
                   <div class="text-xs" style="color: var(--text-muted)" x-text="p.summary"></div>
                 </div>
-                <div class="dot mt-1 ml-2 flex-shrink-0" :class="'dot-' + p.traffic_light"></div>
+                <div class="dot mt-1 ml-2 flex-shrink-0" :class="'dot-' + projectTrafficLight(p)"></div>
               </div>
               <div class="flex items-baseline gap-2 mb-3">
-                <div class="text-2xl font-bold" style="color: var(--text)" x-text="p.percent_complete + '%'"></div>
+                <div class="text-2xl font-bold" style="color: var(--text)" x-text="projectPercentComplete(p) + '%'"></div>
                 <div class="text-xs text-gray-500">complete</div>
                 <template x-if="(p.readiness || []).length">
                   <div class="ml-auto text-[10px] text-gray-500">Readiness: <span style="color: var(--accent)" x-text="readinessPct(p) + '%'"></span></div>
                 </template>
               </div>
               <div class="progress-track mb-3">
-                <div class="progress-fill" :class="p.traffic_light === 'green' ? 'bg-emerald-400' : p.traffic_light === 'yellow' ? 'bg-amber-400' : 'bg-rose-400'" :style="'width:' + p.percent_complete + '%'"></div>
+                <div class="progress-fill" :class="(l => l === 'green' ? 'bg-emerald-400' : l === 'yellow' ? 'bg-amber-400' : 'bg-rose-400')(projectTrafficLight(p))" :style="'width:' + projectPercentComplete(p) + '%'"></div>
               </div>
               <div class="grid grid-cols-3 gap-2 text-xs">
                 <div><div class="text-gray-500">Days left</div><div class="font-medium" style="color: var(--text)" x-text="daysRemainingFor(p) + 'd'"></div></div>
@@ -1369,15 +1369,20 @@
                 <div class="text-xs uppercase tracking-wider text-gray-400">Your queue next week</div>
                 <div class="flex items-center gap-2">
                   <button x-show="isViewingSelf(devViewTarget())" @click="openHandoffForm()" class="primary text-[10px]" title="Log what you closed / in progress / open today">📝 Log my day</button>
+                  <button x-show="isViewingSelf(devViewTarget())" @click="showQueueForm = true" class="secondary text-[10px]" title="Add an item to your queue for next week">+ Add to queue</button>
                   <button @click="showOffProjectForm = true" class="secondary text-[10px]">+ Log off-project</button>
                 </div>
               </div>
               <div class="space-y-2">
                 <template x-for="q in devViewTarget().queue" :key="q.id">
                   <div class="flex items-center gap-2 text-sm py-1.5 border-b border-white/5 last:border-0">
-                    <div class="text-[10px] font-bold px-2 py-0.5 rounded flex-shrink-0" :class="q.priority === 'high' ? 'bg-rose-500/20 text-rose-400' : q.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'" x-text="q.ticket"></div>
+                    <div class="text-[10px] font-bold px-2 py-0.5 rounded flex-shrink-0" :class="q.priority === 'high' ? 'bg-rose-500/20 text-rose-400' : q.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'" x-text="q.ticket || '—'"></div>
                     <div class="text-gray-300 flex-1 text-sm" x-text="q.title"></div>
+                    <button x-show="isViewingSelf(devViewTarget())" @click="removeQueueItem(q.id)" class="text-gray-500 hover:text-rose-400 text-xs flex-shrink-0" title="Remove from queue">✕</button>
                   </div>
+                </template>
+                <template x-if="!devViewTarget().queue || devViewTarget().queue.length === 0">
+                  <div class="text-xs text-gray-500 py-1.5">Nothing queued yet.</div>
                 </template>
               </div>
               <div x-show="devViewTarget().off_project_hours > 0" class="mt-4 pt-3 border-t border-white/5 text-xs">
@@ -2455,6 +2460,22 @@
       </div>
     </div>
   </div>
+  <!-- GAP-10b — developer queue self-entry modal. Devs add what they plan to pick up
+       next week; entries land in the server-backed queue collection. -->
+  <div x-show="showQueueForm" @click.self="showQueueForm = false" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" x-cloak>
+    <div class="glass rounded-xl p-6 w-full max-w-lg fade-in">
+      <div class="flex items-center justify-between mb-4"><div class="text-lg text-white font-semibold">Add to queue</div><button @click="showQueueForm = false" class="text-gray-400 hover:text-white">✕</button></div>
+      <p class="text-xs text-gray-400 mb-4">Queue what you plan to pick up next week. Visible to PM + CEO.</p>
+      <div class="space-y-3">
+        <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Title</label><input x-model="newQueueItem.title" placeholder="e.g. Wire up the payout export"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Ticket</label><input x-model="newQueueItem.ticket" placeholder="e.g. P0-13"></div>
+          <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Priority</label><select x-model="newQueueItem.priority"><option value="high">high</option><option value="medium">medium</option><option value="low">low</option></select></div>
+        </div>
+        <button @click="submitQueueItem()" class="primary w-full mt-3" :disabled="!newQueueItem.title">Add it</button>
+      </div>
+    </div>
+  </div>
   <!-- Log-my-day handoff modal — devs record what they closed / in-progress / open / off-project for today.
        Schema matches scripts/dashboard/handoff_parser.py so the existing pipeline can consume these later. -->
   <div x-show="showHandoffForm" @click.self="showHandoffForm = false" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" x-cloak>
@@ -2677,7 +2698,7 @@
           <div class="p-6 flex items-start justify-between gap-4 flex-wrap" style="background: var(--grad-banner); border-bottom: 1px solid var(--border)">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-3 flex-wrap mb-2">
-                <span class="dot" :class="'dot-' + projectDetail().traffic_light"></span>
+                <span class="dot" :class="'dot-' + projectTrafficLight(projectDetail())"></span>
                 <h2 class="text-xl font-semibold" style="color: var(--text)" x-text="projectDetail().name"></h2>
                 <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded" :class="projectDetail().status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : projectDetail().status === 'paused' ? 'bg-amber-500/15 text-amber-400' : 'bg-gray-500/15 text-gray-400'" x-text="projectDetail().status"></span>
               </div>
@@ -2699,8 +2720,8 @@
             <div class="grid md:grid-cols-2 gap-4">
               <div class="card p-4">
                 <div class="text-[10px] uppercase tracking-wider mb-2" style="color: var(--text-muted)">Build progress</div>
-                <div class="text-3xl font-bold mb-1" style="color: var(--text)" x-text="projectDetail().percent_complete + '%'"></div>
-                <div class="progress-track mt-2"><div class="progress-fill" :class="projectDetail().traffic_light === 'green' ? 'bg-emerald-400' : projectDetail().traffic_light === 'yellow' ? 'bg-amber-400' : 'bg-rose-400'" :style="'width:' + projectDetail().percent_complete + '%'"></div></div>
+                <div class="text-3xl font-bold mb-1" style="color: var(--text)" x-text="projectPercentComplete(projectDetail()) + '%'"></div>
+                <div class="progress-track mt-2"><div class="progress-fill" :class="(l => l === 'green' ? 'bg-emerald-400' : l === 'yellow' ? 'bg-amber-400' : 'bg-rose-400')(projectTrafficLight(projectDetail()))" :style="'width:' + projectPercentComplete(projectDetail()) + '%'"></div></div>
               </div>
               <div class="card p-4">
                 <div class="text-[10px] uppercase tracking-wider mb-2" style="color: var(--text-muted)">Launch readiness</div>
@@ -3311,6 +3332,9 @@ function devdash() {
     handoffDraft: { project: '', closed: '', in_progress: '', open: '', off_project: '', off_project_hours: 0 },
     commits: [], // CanonicalCommit[] — populated by /api/bitbucket-hook via /api/state. NEVER written from the SPA.
     offProject: [], // [{id, dev_email, hours, note, status, week_start, created_at}] — server-backed off-project log (GAP-3)
+    queue: [], // [{id, dev_email, ticket, title, priority, created_at}] — server-backed dev "queue next week" (GAP-10b)
+    showQueueForm: false,
+    newQueueItem: { ticket: '', title: '', priority: 'medium' },
     pendingQrEmail: '',
     showProjectDetail: false, activeProjectDetailId: null, projectDetailEdit: false,
     showDecisionsModal: false, newBlocker: { title: '', waiting_on: 'Fahad', project: '' },
@@ -3550,6 +3574,43 @@ function devdash() {
       return { hours, note: (newest && newest.note) || '' };
     },
 
+    // GAP-10b — a dev's "queue next week" items from the server-backed queue
+    // collection, newest-first by created_at (independent of array order).
+    queueForDev(email) {
+      if (!email || !Array.isArray(this.queue)) return [];
+      return this.queue
+        .filter(q => q && q.dev_email === email)
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    },
+
+    // GAP-4 — derive a project's traffic light from the live compass scores of
+    // the devs working on it, rather than a hardcoded config value. Placeholder
+    // (_isEmpty) devs are excluded so a pre-launch project is not dragged red;
+    // if no real devs remain, fall back to the stored value.
+    projectTrafficLight(project) {
+      if (!project) return 'yellow';
+      const onProject = this.devs.filter(d =>
+        d && !d._isEmpty && Array.isArray(d.projects) && d.projects.includes(project.name));
+      if (!onProject.length) return project.traffic_light || 'yellow';
+      const avg = onProject.reduce((s, d) => {
+        const c = d.compass || {};
+        return s + ((Number(c.velocity) || 0) + (Number(c.craft) || 0) + (Number(c.reliability) || 0) + (Number(c.drive) || 0)) / 4;
+      }, 0) / onProject.length;
+      return avg >= 70 ? 'green' : avg >= 40 ? 'yellow' : 'red';
+    },
+
+    // GAP-5 — derive a project's percent complete from the mean of its phase
+    // percentages when phases are defined; otherwise fall back to the stored
+    // percent_complete value.
+    projectPercentComplete(project) {
+      if (!project) return 0;
+      if (Array.isArray(project.phases) && project.phases.length) {
+        const sum = project.phases.reduce((s, ph) => s + (Number(ph && ph.percent) || 0), 0);
+        return Math.round(sum / project.phases.length);
+      }
+      return Number(project.percent_complete) || 0;
+    },
+
     get devs() {
       const projs = this.config.projects;
       return this.config.users.filter(u => u.role === 'dev' && u.status === 'active').map(u => {
@@ -3565,7 +3626,9 @@ function devdash() {
         // collection, overriding whatever mock/devMockData carried (placed
         // after ...mock so the collection value wins).
         const op = this.offProjectForDev(u.email);
-        return { ...u, ...mock, projects: projectNames, off_project_hours: op.hours, off_project_note: op.note };
+        // GAP-10b — queue items come from the server-backed queue collection,
+        // overriding any mock value (placed after ...mock so the collection wins).
+        return { ...u, ...mock, projects: projectNames, off_project_hours: op.hours, off_project_note: op.note, queue: this.queueForDev(u.email) };
       });
     },
 
@@ -3717,7 +3780,7 @@ function devdash() {
       }
       const defaultConfig = JSON.parse(JSON.stringify(this.config));
       this.corruptStorageKeys = [];
-      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','offProject','aiInsightsCache','devMockData'].forEach(key => {
+      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','offProject','queue','aiInsightsCache','devMockData'].forEach(key => {
         const s = localStorage.getItem('devdash_' + key);
         // L11 FIX — don't silently swallow corrupt keys; log + surface to user so months of data don't vanish unnoticed
         if (s) {
@@ -3940,7 +4003,7 @@ function devdash() {
       // Build a structured context snapshot (no PII secrets, just structural data)
       const snapshot = {
         week_start: this.currentWeekStart(),
-        projects: this.config.projects.map(p => ({ id: p.id, name: p.name, traffic_light: p.traffic_light, percent_complete: p.percent_complete, days_remaining: this.daysRemainingFor(p), forecast_launch: p.forecast_launch })),
+        projects: this.config.projects.map(p => ({ id: p.id, name: p.name, traffic_light: this.projectTrafficLight(p), percent_complete: this.projectPercentComplete(p), days_remaining: this.daysRemainingFor(p), forecast_launch: p.forecast_launch })),
         devs: this.devs.map(d => ({ name: d.displayName, compass: d.compass, handoff_mult: d.handoff_mult, off_project_hours: d.off_project_hours, items_closed: d.items_closed, summary: d.summary })),
         bugs_open: this.bugs.filter(b => b.status === 'open').length,
         bugs_high_open: this.bugs.filter(b => b.status === 'open' && b.severity === 'HIGH').length,
@@ -4024,6 +4087,7 @@ function devdash() {
         growthLog: this.growthLog,
         auditLog: this.auditLog,
         offProject: this.offProject,
+        queue: this.queue,
       };
       const json = JSON.stringify(payload, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
@@ -4088,7 +4152,7 @@ function devdash() {
     _STATE_COLLECTIONS: new Set([
       'bugs','auditFindings','featureRequests','disputes','blockers','stuckPrs',
       'regressionCandidates','rewardEvents','payoutBatches','pmAssessments',
-      'clockEntries','growthLog','auditLog','handoffs','offProject','commits','config',
+      'clockEntries','growthLog','auditLog','handoffs','offProject','queue','commits','config',
     ]),
     _READONLY_COLLECTIONS: new Set(['commits']),
     storageFull: false, _storageWarnedOnce: false, corruptStorageKeys: [],
@@ -4097,7 +4161,7 @@ function devdash() {
     nextId() {
       if (!this._idCounter) {
         const ids = [];
-        for (const arr of [this.bugs, this.auditFindings, this.featureRequests, this.disputes, this.blockers, this.stuckPrs, this.regressionCandidates, this.pmAssessments, this.rewardEvents, this.payoutBatches, this.auditLog, this.offProject]) {
+        for (const arr of [this.bugs, this.auditFindings, this.featureRequests, this.disputes, this.blockers, this.stuckPrs, this.regressionCandidates, this.pmAssessments, this.rewardEvents, this.payoutBatches, this.auditLog, this.offProject, this.queue]) {
           if (Array.isArray(arr)) for (const x of arr) if (x && typeof x.id === 'number') ids.push(x.id);
         }
         this._idCounter = ids.length ? Math.max(...ids) : Date.now();
@@ -4301,7 +4365,7 @@ function devdash() {
       const ownerPct = this.config.rewards.owner_bonus_pct || 0;
       const grace = this.config.rewards.owner_bonus_grace_days || 0;
       if (ownerPct > 0) {
-        const ownedProjects = (this.config.projects || []).filter(p => p.owner_email === dev.email && p.traffic_light === 'green' && p.deadline && p.deadline !== '2099-12-31' && p.forecast_launch && p.forecast_launch !== 'Ongoing');
+        const ownedProjects = (this.config.projects || []).filter(p => p.owner_email === dev.email && this.projectTrafficLight(p) === 'green' && p.deadline && p.deadline !== '2099-12-31' && p.forecast_launch && p.forecast_launch !== 'Ongoing');
         for (const p of ownedProjects) {
           const forecast = new Date(p.forecast_launch);
           const deadline = new Date(p.deadline);
@@ -4836,7 +4900,7 @@ function devdash() {
       if (!valid.length) return { date: '—', projectName: '—', daysDelta: 0, light: 'green' };
       const latest = valid.reduce((a,b) => new Date(a.forecast_launch).getTime() > new Date(b.forecast_launch).getTime() ? a : b);
       const daysDelta = Math.round((new Date(latest.forecast_launch) - new Date(latest.deadline)) / (1000*60*60*24));
-      return { date: latest.forecast_launch, projectName: latest.name, daysDelta, light: latest.traffic_light };
+      return { date: latest.forecast_launch, projectName: latest.name, daysDelta, light: this.projectTrafficLight(latest) };
     },
     trueNorthDev() { return this.devs.find(d => this.hitTrueNorth(d)); },
     topPerformer() { return this.devs.reduce((a,b) => this.strongDirections(b).length > this.strongDirections(a).length ? b : a); },
@@ -5097,21 +5161,22 @@ function devdash() {
       const disagreements = this.pmAssessments.filter(a => a.disagreement_flagged).length;
 
       // Portfolio-wide stats for the "all projects" case
-      const r = this.config.projects.filter(p => p.traffic_light === 'red').length;
-      const y = this.config.projects.filter(p => p.traffic_light === 'yellow').length;
+      const r = this.config.projects.filter(p => this.projectTrafficLight(p) === 'red').length;
+      const y = this.config.projects.filter(p => this.projectTrafficLight(p) === 'yellow').length;
       const top = this.topPerformer();
       const atRisk = this.devs.filter(d => this.strongDirections(d).length === 0 && d.handoff_mult < 0.94);
       const offHours = this.teamOffProjectHours();
-      const behindProjects = this.config.projects.filter(p => p.traffic_light === 'red');
+      const behindProjects = this.config.projects.filter(p => this.projectTrafficLight(p) === 'red');
       const regressions = projectRegressions.length;
 
       // Lead sentence — project-scoped OR portfolio-scoped
       const projectDevs = scoped ? this.devs.filter(d => d.projects.includes(proj?.name)) : [];
       let lead;
       if (scoped && proj) {
-        const lightLabel = proj.traffic_light === 'red' ? 'behind' : proj.traffic_light === 'yellow' ? 'at risk' : 'on track';
-        const lightColour = proj.traffic_light === 'red' ? '#f87171' : proj.traffic_light === 'yellow' ? 'var(--accent)' : '#4ade80';
-        lead = `☕  On <strong style="color: var(--accent)">${this._esc(proj.name)}</strong> — <span style="color: ${lightColour}">${lightLabel}</span> at <strong>${Number(proj.percent_complete) || 0}%</strong> · forecast <strong>${this._esc(proj.forecast_launch)}</strong> · ${this.daysRemainingFor(proj)}d remaining.`;
+        const projLight = this.projectTrafficLight(proj);
+        const lightLabel = projLight === 'red' ? 'behind' : projLight === 'yellow' ? 'at risk' : 'on track';
+        const lightColour = projLight === 'red' ? '#f87171' : projLight === 'yellow' ? 'var(--accent)' : '#4ade80';
+        lead = `☕  On <strong style="color: var(--accent)">${this._esc(proj.name)}</strong> — <span style="color: ${lightColour}">${lightLabel}</span> at <strong>${this.projectPercentComplete(proj)}%</strong> · forecast <strong>${this._esc(proj.forecast_launch)}</strong> · ${this.daysRemainingFor(proj)}d remaining.`;
       } else if (r > 0) {
         lead = `☕  Three things on the table today — starting with <strong class="text-rose-400">${this._esc(behindProjects[0]?.name || 'the red one')}</strong>.`;
       } else if (y > 0) {
@@ -5747,6 +5812,48 @@ function devdash() {
       this.newOffProject = { description: '', hours: '', status: 'done' };
       this.showOffProjectForm = false;
     },
+    // GAP-10b — add an item to the current user's queue. Self-gated: a PM/CEO
+    // viewing another dev cannot add to their own queue from that panel.
+    submitQueueItem() {
+      if (!this.isViewingSelf(this.devViewTarget())) {
+        alert('You can only add items to your own queue.');
+        return;
+      }
+      const title = (this.newQueueItem.title || '').trim();
+      if (!title) {
+        alert('Give the queue item a title.');
+        return;
+      }
+      const email = this.currentUser?.email;
+      if (!email) return;
+      if (!Array.isArray(this.queue)) this.queue = [];
+      this.queue.unshift({
+        id: this.nextId(),
+        dev_email: email,
+        ticket: (this.newQueueItem.ticket || '').trim(),
+        title: title,
+        priority: this.newQueueItem.priority || 'medium',
+        created_at: new Date().toISOString(),
+      });
+      this.save('queue');
+      this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'Queue', change: `Queued — ${title}` });
+      this.save('auditLog');
+      this.newQueueItem = { ticket: '', title: '', priority: 'medium' };
+      this.showQueueForm = false;
+    },
+    // GAP-10b — remove a queue item. Hard-guarded: only the entry's own owner
+    // (dev_email === currentUser.email) can remove it.
+    removeQueueItem(id) {
+      if (!Array.isArray(this.queue)) return;
+      const entry = this.queue.find(q => q && q.id === id);
+      if (!entry) return;
+      if (entry.dev_email !== this.currentUser?.email) {
+        alert('You can only remove your own queue items.');
+        return;
+      }
+      this.queue = this.queue.filter(q => q && q.id !== id);
+      this.save('queue');
+    },
     openHandoffForm() {
       const today = new Date().toISOString().slice(0, 10);
       const existing = this.handoffs.find(h => h.dev_email === this.currentUser?.email && h.date === today);
@@ -5972,8 +6079,8 @@ function devdash() {
       return { ceo: '👑', pm: '🎯', dev: '⚡', qa: '🔍', qa_auditor: '🧐' }[role] || '✨';
     },
     teamMood() {
-      const red = this.config.projects.filter(p => p.traffic_light === 'red').length;
-      const yellow = this.config.projects.filter(p => p.traffic_light === 'yellow').length;
+      const red = this.config.projects.filter(p => this.projectTrafficLight(p) === 'red').length;
+      const yellow = this.config.projects.filter(p => this.projectTrafficLight(p) === 'yellow').length;
       const high = this.bugs.filter(b => b.severity === 'HIGH' && b.status === 'open').length;
       if (red > 0 || high > 2) return 'sad';
       if (yellow > 0 || high > 0) return 'neutral';
@@ -5990,9 +6097,9 @@ function devdash() {
       return set[idx];
     },
     mascotLine1() {
-      const g = this.config.projects.filter(p => p.traffic_light === 'green').length;
-      const y = this.config.projects.filter(p => p.traffic_light === 'yellow').length;
-      const r = this.config.projects.filter(p => p.traffic_light === 'red').length;
+      const g = this.config.projects.filter(p => this.projectTrafficLight(p) === 'green').length;
+      const y = this.config.projects.filter(p => this.projectTrafficLight(p) === 'yellow').length;
+      const r = this.config.projects.filter(p => this.projectTrafficLight(p) === 'red').length;
       const mood = this.teamMood();
       const lines = {
         happy: [
