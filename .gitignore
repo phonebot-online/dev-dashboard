@@ -46,3 +46,7 @@ _private-notes/
 
 # locked-plan pipeline run artifacts — scratch, never commit
 .locked-plan/
+
+# Per-deployment Cloudflare config — each clone keeps its own (worker name +
+# KV id differ per account). Copy worker/wrangler.toml.example to get started.
+worker/wrangler.toml
