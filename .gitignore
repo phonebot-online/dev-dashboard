@@ -43,3 +43,6 @@ worker/qrcodes/
 
 # Private notes folder — never commit, never expose to devs via the repo
 _private-notes/
+
+# locked-plan pipeline run artifacts — scratch, never commit
+.locked-plan/
