@@ -2017,6 +2017,36 @@
             <div><label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Dev sees peer compasses</label><select x-model="config.scoring.visibility.peer"><option value="shapes">Shapes + numbers</option><option value="shapes_only">Shapes only</option><option value="none">Nothing</option></select></div>
           </div>
         </div>
+        <div class="card p-5">
+          <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Growth learning resources</div>
+          <div class="text-[11px] text-gray-500 mb-3">Links shown to developers in the growth-challenge panel, grouped by compass direction. Edit, add, or remove freely.</div>
+          <template x-if="!config.learning_resources">
+            <div>
+              <div class="text-[11px] text-gray-500 mb-2">Currently showing the built-in default links. Click below to make them editable.</div>
+              <button @click="editLearningResources()" class="secondary text-xs">Customise learning resources</button>
+            </div>
+          </template>
+          <template x-if="config.learning_resources">
+            <div class="space-y-4">
+              <template x-for="dir in ['velocity','craft','reliability','drive']" :key="dir">
+                <div class="p-3 rounded-lg border border-white/5">
+                  <div class="text-[10px] uppercase tracking-wider text-gray-500 mb-2" x-text="dir"></div>
+                  <div class="space-y-2">
+                    <template x-for="(res, idx) in (config.learning_resources[dir] || [])" :key="idx">
+                      <div class="flex items-center gap-2">
+                        <input :value="res.label" @input="res.label = $event.target.value; saveConfig()" placeholder="Label" class="!py-1 !text-xs flex-1">
+                        <input :value="res.url" @input="res.url = $event.target.value; saveConfig()" placeholder="https://..." class="!py-1 !text-xs flex-1">
+                        <button @click="removeLearningResource(dir, idx)" class="text-[11px] text-gray-500 hover:text-rose-400" title="Remove">✕</button>
+                      </div>
+                    </template>
+                  </div>
+                  <button @click="addLearningResource(dir)" class="secondary text-[10px] mt-2">+ Add resource</button>
+                </div>
+              </template>
+              <button @click="resetLearningResources()" class="text-[10px] hover:underline" style="color: var(--text-fade)">Reset to built-in defaults</button>
+            </div>
+          </template>
+        </div>
         <div class="text-[11px] text-center py-2" style="color: var(--text-fade)">✓ Scoring changes save automatically</div>
       </div>
 
@@ -3237,27 +3267,65 @@ function devdash() {
     showPayoutModal: false, payoutDraft: { ref: '', note: '', selected_ids: [], ceo_approved: false, pm_approved: false },
     aiInsightsCache: null, aiInsightsLoading: false, aiInsightsError: null,
     // Learning resource library per direction — editable in Settings → Scoring later
-    learningResources: {
-      velocity: [
-        { label: 'Small commits, not big ones (Kent Beck)', url: 'https://tidyfirst.substack.com/p/test-commit-revert' },
-        { label: 'Vertical slices > horizontal layers', url: 'https://martinfowler.com/articles/vertical-slice.html' },
-        { label: 'Break tickets into 1-day chunks', url: 'https://signalvnoise.com/posts/3124' },
-      ],
-      craft: [
-        { label: 'Test-per-bug: one regression test per fix', url: 'https://kentcdodds.com/blog/testing' },
-        { label: 'Self-review before requesting review', url: 'https://google.github.io/eng-practices/review/developer/small-cls.html' },
-        { label: 'Refactor BEFORE you feature', url: 'https://martinfowler.com/books/refactoring.html' },
-      ],
-      reliability: [
-        { label: 'Pull less, finish more (WIP limits)', url: 'https://kanbantool.com/kanban-library/kanban-principles/wip-limits' },
-        { label: 'Estimate realistically, not optimistically', url: 'https://www.pluralsight.com/blog/software-development/estimating-tasks-time' },
-        { label: 'Timebox before you dive in', url: 'https://www.atlassian.com/agile/project-management/timeboxing' },
-      ],
-      drive: [
-        { label: 'Fix what nobody asked you to fix', url: 'https://www.kalzumeus.com/2011/10/28/dont-call-yourself-a-programmer/' },
-        { label: 'Bias for action: 1 unclaimed P0 this week', url: 'https://www.allthingsdistributed.com/2015/01/leadership-principles-amazon.html' },
-        { label: 'Write a runbook for the thing only you know', url: 'https://sre.google/sre-book/being-on-call/' },
-      ],
+    // Learning resources — reads from config.learning_resources (server-backed,
+    // editable in Settings -> Scoring). Falls back to the built-in defaults
+    // below when config has none yet, so the panel never goes blank.
+    get learningResources() {
+      const cfg = this.config && this.config.learning_resources;
+      if (cfg && typeof cfg === 'object') return cfg;
+      return this._defaultLearningResources();
+    },
+    _defaultLearningResources() {
+      return {
+        velocity: [
+          { label: 'Small commits, not big ones (Kent Beck)', url: 'https://tidyfirst.substack.com/p/test-commit-revert' },
+          { label: 'Vertical slices > horizontal layers', url: 'https://martinfowler.com/articles/vertical-slice.html' },
+          { label: 'Break tickets into 1-day chunks', url: 'https://signalvnoise.com/posts/3124' },
+        ],
+        craft: [
+          { label: 'Test-per-bug: one regression test per fix', url: 'https://kentcdodds.com/blog/testing' },
+          { label: 'Self-review before requesting review', url: 'https://google.github.io/eng-practices/review/developer/small-cls.html' },
+          { label: 'Refactor BEFORE you feature', url: 'https://martinfowler.com/books/refactoring.html' },
+        ],
+        reliability: [
+          { label: 'Pull less, finish more (WIP limits)', url: 'https://kanbantool.com/kanban-library/kanban-principles/wip-limits' },
+          { label: 'Estimate realistically, not optimistically', url: 'https://www.pluralsight.com/blog/software-development/estimating-tasks-time' },
+          { label: 'Timebox before you dive in', url: 'https://www.atlassian.com/agile/project-management/timeboxing' },
+        ],
+        drive: [
+          { label: 'Fix what nobody asked you to fix', url: 'https://www.kalzumeus.com/2011/10/28/dont-call-yourself-a-programmer/' },
+          { label: 'Bias for action: 1 unclaimed P0 this week', url: 'https://www.allthingsdistributed.com/2015/01/leadership-principles-amazon.html' },
+          { label: 'Write a runbook for the thing only you know', url: 'https://sre.google/sre-book/being-on-call/' },
+        ],
+      };
+    },
+    // Settings -> Scoring -> Growth learning resources editors.
+    // First edit seeds config.learning_resources from the built-in defaults so
+    // the dev panel keeps showing the same links until they're changed.
+    editLearningResources() {
+      if (!this.config.learning_resources) {
+        this.config.learning_resources = JSON.parse(JSON.stringify(this._defaultLearningResources()));
+      }
+      this.saveConfig();
+    },
+    addLearningResource(direction) {
+      this.editLearningResources();
+      if (!Array.isArray(this.config.learning_resources[direction])) {
+        this.config.learning_resources[direction] = [];
+      }
+      this.config.learning_resources[direction].push({ label: '', url: '' });
+      this.saveConfig();
+    },
+    removeLearningResource(direction, idx) {
+      const list = this.config.learning_resources && this.config.learning_resources[direction];
+      if (!Array.isArray(list)) return;
+      list.splice(idx, 1);
+      this.saveConfig();
+    },
+    resetLearningResources() {
+      if (!confirm('Reset all learning resources to the built-in defaults? Your custom links will be lost.')) return;
+      this.config.learning_resources = JSON.parse(JSON.stringify(this._defaultLearningResources()));
+      this.saveConfig();
     },
     density: 'comfortable', // 'comfortable' | 'compact'
     collapsed: { pmProjects: false, pmDevs: false, pmBugs: false, ceoPortfolio: false, ceoCallouts: false, qaPast: false, qaaPast: false },
@@ -4454,12 +4522,30 @@ function devdash() {
       return Object.keys(this.growthLog).filter(k => k.startsWith(dev.email + '-')).length;
     },
     handoffStreak(dev) {
-      // Deterministic synthetic until real historic data is wired; scales with handoff_mult.
-      if (!dev) return 0;
-      const seed = [...(dev.email + 'streak')].reduce((s, c) => s + c.charCodeAt(0), 0);
-      if (dev.handoff_mult < 0.9) return 0;
-      if (dev.handoff_mult < 0.95) return (seed % 3) + 1;
-      return (seed % 5) + 3;
+      // Real streak — count of consecutive weeks (ending this week or last)
+      // in which this dev submitted at least one handoff. Reads state:handoffs.
+      if (!dev || !dev.email || !Array.isArray(this.handoffs)) return 0;
+      const WEEK = 7 * 86400 * 1000;
+      const weekIndex = ts => Math.floor(new Date(ts).getTime() / WEEK);
+      const weeks = new Set(
+        this.handoffs
+          .filter(h => h && h.dev_email === dev.email)
+          .map(h => h.timestamp || h.date)
+          .filter(Boolean)
+          .map(weekIndex)
+          .filter(Number.isFinite)
+      );
+      if (!weeks.size) return 0;
+      const thisWeek = weekIndex(Date.now());
+      // Anchor on this week if logged, else last week; older-only means the
+      // streak has lapsed → 0.
+      let cursor = weeks.has(thisWeek) ? thisWeek
+                 : weeks.has(thisWeek - 1) ? thisWeek - 1
+                 : null;
+      if (cursor === null) return 0;
+      let streak = 0;
+      while (weeks.has(cursor)) { streak++; cursor--; }
+      return streak;
     },
     personalBestAvg(dev) {
       if (!dev || !dev.compass) return 0;
