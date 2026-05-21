@@ -61,12 +61,26 @@ function parseAuthor(raw: string): { name: string; email: string } {
   return { name: raw.trim(), email: '' };
 }
 
+// Map a commit's author email through the alias table so a developer who
+// commits under more than one git identity (e.g. a personal Gmail on one
+// machine, a work address on another) is counted as a single person.
+// `aliases` maps alias-email -> canonical-email; comes from config.email_aliases.
+export function canonicaliseEmail(email: string, aliases?: Record<string, string>): string {
+  const lower = (email || '').toLowerCase().trim();
+  if (!aliases) return lower;
+  return (aliases[lower] || lower).toLowerCase().trim();
+}
+
 // Parse a Bitbucket Cloud push payload. Many shapes — branch push, tag push,
 // branch creation/deletion, force-push. Only accept "branch" pushes that
 // actually have commits. Filter out anything older than 14 days.
 //
 // Reference: https://support.atlassian.com/bitbucket-cloud/docs/event-payloads/#Push
-export function parsePushEvent(payload: any, repoToProject: Record<string, string>): CanonicalCommit[] {
+export function parsePushEvent(
+  payload: any,
+  repoToProject: Record<string, string>,
+  emailAliases?: Record<string, string>,
+): CanonicalCommit[] {
   if (!payload || typeof payload !== 'object') return [];
   const repoFullName = String(payload?.repository?.full_name || '').trim();
   const project = repoToProject[repoFullName] || repoToProject[repoFullName.toLowerCase()] || '';
@@ -97,7 +111,7 @@ export function parsePushEvent(payload: any, repoToProject: Record<string, strin
         sha,
         message: String(c?.message || '').trim(),
         author_name: name,
-        author_email: email,
+        author_email: canonicaliseEmail(email, emailAliases),
         timestamp: ts.toISOString(),
         project,
         repo: repoFullName,

@@ -5,7 +5,7 @@ import {
   sessionCookieHeader, clearCookieHeader, readSessionCookie,
 } from './session';
 import { getAllState, putCollection, clearAllState, isCollection } from './state';
-import { verifySignature, parsePushEvent, mergeCommits, CanonicalCommit } from './bitbucket';
+import { verifySignature, parsePushEvent, mergeCommits, canonicaliseEmail, CanonicalCommit } from './bitbucket';
 // @ts-ignore — bundled as text by wrangler [[rules]] type=Text
 import devdashHtml from '../../devdash.html';
 
@@ -172,7 +172,10 @@ async function handleBitbucketPush(req: Request, env: Env): Promise<Response> {
       if (slug) repoToProject[slug] = p.name;
     }
   }
-  const incoming = parsePushEvent(payload, repoToProject);
+  // Email alias map — collapses multiple git identities for one person into a
+  // single canonical email. Read from config.email_aliases (editable, no redeploy).
+  const emailAliases = ((cfg as any)?.email_aliases || {}) as Record<string, string>;
+  const incoming = parsePushEvent(payload, repoToProject, emailAliases);
   let totalCommits = 0;
   if (incoming.length > 0) {
     const existingRaw = await env.DASHBOARD_KV.get('state:commits');
@@ -193,7 +196,7 @@ async function handleBitbucketPush(req: Request, env: Env): Promise<Response> {
       newEvents.push({
         sha: String(c?.hash || '').slice(0, 12),
         author_name: String(c?.author?.user?.display_name || c?.author?.raw || 'unknown'),
-        author_email: extractEmail(String(c?.author?.raw || '')),
+        author_email: canonicaliseEmail(extractEmail(String(c?.author?.raw || '')), emailAliases),
         message: String(c?.message || '').split('\n')[0].slice(0, 240),
         branch,
         repo: repoName,
