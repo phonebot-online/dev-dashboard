@@ -5,7 +5,10 @@
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "staging": "node scripts/seed-local.mjs && wrangler dev --persist-to .wrangler/state",
+    "staging:seed": "node scripts/seed-local.mjs",
+    "staging:code": "node scripts/seed-local.mjs --code-only"
   },
   "dependencies": {
     "otplib": "^12.0.1"
