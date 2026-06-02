@@ -4,6 +4,17 @@ import { sendEmail, formatAlertEmail, AlertSnapshot } from './email';
 export interface Env {
   DASHBOARD_KV: KVNamespace;
   TOTP_ENCRYPTION_KEY: string;
+  // Set via: npx wrangler secret put BITBUCKET_WEBHOOK_SECRET
+  // Must match the secret configured in Bitbucket → repo → Webhooks.
+  // WEBHOOK_SECRET is accepted as a legacy alias (Faizan's original name).
+  BITBUCKET_WEBHOOK_SECRET?: string;
+  WEBHOOK_SECRET?: string;
+  // Moonshot (Kimi) — OpenAI-compatible. KIMI_API_KEY powers the PM Agent.
+  // KIMI_BASE_URL / KIMI_MODEL are optional overrides so the .ai/.cn portal or
+  // model can change without a code edit (defaults: api.moonshot.ai, moonshot-v1-32k).
+  KIMI_API_KEY?: string;
+  KIMI_BASE_URL?: string;
+  KIMI_MODEL?: string;
 }
 
 export default {

@@ -11,6 +11,51 @@ worker/node_modules/
 worker/.wrangler/
 worker/dist/
 
+# Local staging secrets + plaintext TOTP secrets — never commit
+worker/.dev.vars
+worker/.staging-users.json
+
 # macOS
 .DS_Store
 **/.DS_Store
+
+# TOTP provisioning artifacts — QR codes contain secrets, never commit
+provisioning-qr-codes/
+
+# Local secrets used by the devdash-smoke agent — never commit
+.devdash-secrets.env
+
+# Local API keys for ad-hoc live checks (z.ai etc.) — never commit
+.env
+.env.local
+.env.*.local
+
+# Playwright UI tests — node_modules and per-run screenshots
+tests-ui/node_modules/
+tests-ui/screenshots/
+tests-ui/test-results/
+tests-ui/playwright-report/
+
+# Smoke-test outputs (synthetic HTML, ad-hoc test scripts)
+output/
+*.md
+
+# Webhook + backfill local artifacts — never commit
+worker/.bitbucket-webhook-secret-saved.txt
+worker/events_list.json
+worker/.tmp-*.json
+worker/*.bak
+
+# TOTP provisioning artifacts — never commit
+worker/.master-key.txt
+worker/qrcodes/
+
+# Private notes folder — never commit, never expose to devs via the repo
+_private-notes/
+
+# locked-plan pipeline run artifacts — scratch, never commit
+.locked-plan/
+
+# Per-deployment Cloudflare config — each clone keeps its own (worker name +
+# KV id differ per account). Copy worker/wrangler.toml.example to get started.
+worker/wrangler.toml

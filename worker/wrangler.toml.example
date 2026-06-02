@@ -1,0 +1,40 @@
+# wrangler.toml TEMPLATE
+#
+# wrangler.toml itself is gitignored — it holds per-deployment values
+# (worker name + KV namespace id) that differ for every Cloudflare account.
+#
+# ONE-TIME SETUP on a fresh clone:
+#   cp worker/wrangler.toml.example worker/wrangler.toml
+#   then edit the two YOUR-... placeholders below.
+#
+# After that, `git pull` will NEVER touch your wrangler.toml again.
+
+name = "YOUR-WORKER-NAME"            # e.g. devdash-pm-demo  (your worker's name)
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Serve on the free workers.dev subdomain (e.g. <name>.<account>.workers.dev).
+workers_dev = true
+
+# Bundle devdash.html (one level up) as a text import so routes.ts can inject
+# the authenticated session and serve it as the SPA shell.
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
+[[kv_namespaces]]
+binding = "DASHBOARD_KV"
+id = "YOUR-KV-NAMESPACE-ID"          # from: npx wrangler kv namespace create DASHBOARD_KV
+
+# Custom-domain route — managed manually in the Cloudflare dashboard when the
+# domain's zone is on a different Cloudflare account. Leave commented unless
+# wrangler can assign it from this machine's logged-in account.
+# [[routes]]
+# pattern = "your-domain.example/*"
+# zone_name = "your-domain.example"
+
+# Daily cron at 13:00 UTC (~midnight AWST / 6am PKT / 11pm UK the day before)
+[triggers]
+crons = ["0 13 * * *"]
