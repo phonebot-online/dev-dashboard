@@ -25,6 +25,11 @@ provisioning-qr-codes/
 # Local secrets used by the devdash-smoke agent — never commit
 .devdash-secrets.env
 
+# Local API keys for ad-hoc live checks (z.ai etc.) — never commit
+.env
+.env.local
+.env.*.local
+
 # Playwright UI tests — node_modules and per-run screenshots
 tests-ui/node_modules/
 tests-ui/screenshots/
