@@ -2358,8 +2358,8 @@
               <input x-model="config.system.ai_api_key" type="password" placeholder="sk-ant-...">
             </div>
             <div>
-              <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Custom endpoint (if provider = custom)</label>
-              <input x-model="config.system.ai_endpoint" placeholder="https://api.example.com/v1/messages">
+              <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Custom endpoint — OpenAI-compatible /chat/completions (if provider = custom)</label>
+              <input x-model="config.system.ai_endpoint" placeholder="https://api.z.ai/api/paas/v4/chat/completions">
             </div>
             <div>
               <label class="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Insight cache TTL (hours)</label>
@@ -3928,6 +3928,8 @@ function devdash() {
       const cfg = this.config.system;
       if (!cfg.ai_provider || cfg.ai_provider === 'none') { alert('AI provider is off. Enable in Settings → AI.'); return; }
       if (!cfg.ai_api_key && cfg.ai_provider !== 'custom') { alert('API key missing. Add one in Settings → AI.'); return; }
+      // custom: API key is optional (local unauthenticated endpoints OK), but the endpoint URL is required.
+      if (cfg.ai_provider === 'custom' && !(cfg.ai_endpoint || '').trim()) { alert('Custom endpoint URL missing. Add it in Settings → AI.'); return; }
       // Cache check
       if (this.aiInsightsCache && this.aiInsightsCache.generated_at) {
         const ageH = (Date.now() - new Date(this.aiInsightsCache.generated_at).getTime()) / 3600000;
@@ -3978,9 +3980,23 @@ function devdash() {
             max_tokens: 1500,
           });
         } else {
-          // custom endpoint — send as anthropic-shaped; user owns the adapter
+          // custom endpoint — OpenAI-compatible chat/completions
+          // (z.ai, Moonshot/Kimi, OpenRouter, Together, Groq, local llama/vLLM/Ollama)
           if (cfg.ai_api_key) headers['Authorization'] = 'Bearer ' + cfg.ai_api_key;
-          body = JSON.stringify({ model: cfg.ai_model, system: systemPrompt, user: userPrompt });
+          const customBody = {
+            model: cfg.ai_model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            max_tokens: 1500,
+          };
+          // z.ai GLM reasoning models route the answer into reasoning_content unless thinking is
+          // disabled. Scope this to z.ai hosts so other custom endpoints are unaffected.
+          let customHost = '';
+          try { customHost = new URL(endpoint).hostname; } catch (_) {}
+          if (/(^|\.)z\.ai$/i.test(customHost)) customBody.thinking = { type: 'disabled' };
+          body = JSON.stringify(customBody);
         }
         const res = await fetch(endpoint, { method: 'POST', headers, body });
         if (!res.ok) {
@@ -3988,10 +4004,27 @@ function devdash() {
           throw new Error('AI API ' + res.status + ': ' + errText.slice(0, 300));
         }
         const data = await res.json();
+        const finishReason = data.choices?.[0]?.finish_reason;
         let insights = '';
-        if (cfg.ai_provider === 'anthropic') insights = data.content?.[0]?.text || JSON.stringify(data);
-        else if (cfg.ai_provider === 'openai') insights = data.choices?.[0]?.message?.content || JSON.stringify(data);
-        else insights = data.text || data.content || JSON.stringify(data);
+        if (cfg.ai_provider === 'anthropic') {
+          insights = (data.content?.[0]?.text || '').trim();
+        } else if (cfg.ai_provider === 'openai') {
+          insights = (data.choices?.[0]?.message?.content || '').trim();
+        } else {
+          // custom (OpenAI-compatible). content is the answer; reasoning_content is the model's
+          // thinking, not the answer — only surface it, clearly labelled, as a degraded fallback.
+          const m = data.choices?.[0]?.message;
+          insights = (m?.content || '').trim();
+          if (!insights && (m?.reasoning_content || '').trim()) {
+            insights = '[no final answer returned — showing model reasoning]\n\n' + m.reasoning_content.trim();
+          }
+        }
+        // Never cache a blank/garbled response as a successful insight.
+        if (!insights) {
+          throw new Error('AI returned no usable text'
+            + (finishReason ? ' (finish_reason: ' + finishReason + ')' : '')
+            + '. Raw: ' + JSON.stringify(data).slice(0, 200));
+        }
         this.aiInsightsCache = { generated_at: new Date().toISOString(), insights, snapshot_hash: JSON.stringify(snapshot).length };
         this.save('aiInsightsCache');
         this.auditLog.unshift({ id: this.nextId(), when: new Date().toISOString().replace('T',' ').slice(0,16), who: this.currentUser?.displayName || '—', section: 'AI', change: `Generated insights (${cfg.ai_provider} / ${cfg.ai_model})` });
