@@ -31,6 +31,8 @@ function makeThis(cfg) {
     currentUser: { displayName: 'Tester' },
     currentWeekStart: () => '2026-06-01',
     daysRemainingFor: () => 30,
+    projectTrafficLight: (p) => p?.traffic_light || 'green',
+    projectPercentComplete: (p) => p?.percent_complete ?? 50,
     save() {},
     nextId: () => 1,
   };
