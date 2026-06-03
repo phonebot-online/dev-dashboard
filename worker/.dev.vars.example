@@ -1,0 +1,14 @@
+# Template for worker/.dev.vars (local `wrangler dev` secrets).
+# The real .dev.vars is gitignored. `npm run staging:seed` creates it for you
+# with a freshly generated local key — you normally don't edit this by hand.
+#
+# TOTP_ENCRYPTION_KEY: base64 of a 32-byte AES-256 key. MUST match the key the
+#   seed script encrypted the test users' TOTP secrets with (it manages this).
+TOTP_ENCRYPTION_KEY=""
+# Shared secret for the Bitbucket webhook HMAC check (any value works locally).
+BITBUCKET_WEBHOOK_SECRET="local-staging-webhook-secret"
+# Moonshot (Kimi) key to exercise the PM Agent. Optional base/model overrides below
+# (defaults: https://api.moonshot.ai/v1 , moonshot-v1-32k; use .cn for that portal).
+KIMI_API_KEY=""
+# KIMI_BASE_URL="https://api.moonshot.cn/v1"
+# KIMI_MODEL="moonshot-v1-32k"

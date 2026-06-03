@@ -11,6 +11,10 @@ worker/node_modules/
 worker/.wrangler/
 worker/dist/
 
+# Local staging secrets + plaintext TOTP secrets — never commit
+worker/.dev.vars
+worker/.staging-users.json
+
 # macOS
 .DS_Store
 **/.DS_Store

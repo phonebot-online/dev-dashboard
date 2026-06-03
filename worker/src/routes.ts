@@ -436,7 +436,7 @@ function renderLiveFeedHtml(events: LiveEvent[], email: string): string {
 }
 
 // ============================================================================
-// PM Agent — commit-aware Claude Q&A for QA Auditor / PM / CEO
+// PM Agent — commit-aware Kimi (Moonshot) Q&A for QA Auditor / PM / CEO
 // ============================================================================
 
 interface PmAgentRequest {
@@ -453,8 +453,8 @@ async function handlePmAgent(
   if (!['pm', 'ceo', 'qa_auditor'].includes(session.role)) {
     return jsonError(403, 'insufficient role');
   }
-  if (!env.CLAUDE_API_KEY) {
-    return jsonError(503, 'AI not configured — set CLAUDE_API_KEY secret');
+  if (!env.KIMI_API_KEY) {
+    return jsonError(503, 'AI not configured — set KIMI_API_KEY secret');
   }
 
   let body: PmAgentRequest;
@@ -520,28 +520,38 @@ ${projectList || 'not available'}`;
 
   const userMessage = `${filterNote ? `Commits filtered to ${filterNote}.\n\n` : ''}Commit history (${limited.length} commits):\n${commitLines}\n\n---\n\nQuestion: ${prompt}`;
 
-  const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+  // Moonshot (Kimi) is OpenAI-compatible: single `messages` array with the system
+  // prompt as a system-role message, response in choices[0].message.content.
+  // Default model is moonshot-v1-32k — the prompt can carry up to 300 commit
+  // lines (~10k tokens), which would overflow the 8k model.
+  const kimiBase = (env.KIMI_BASE_URL || 'https://api.moonshot.ai/v1').replace(/\/+$/, '');
+  const kimiModel = env.KIMI_MODEL || 'moonshot-v1-32k';
+
+  const kimiRes = await fetch(`${kimiBase}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': env.CLAUDE_API_KEY,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${env.KIMI_API_KEY}`,
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: kimiModel,
       max_tokens: 1024,
-      system,
-      messages: [{ role: 'user', content: userMessage }],
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: userMessage },
+      ],
     }),
   });
 
-  if (!claudeRes.ok) {
-    console.error('Claude API error:', await claudeRes.text());
+  if (!kimiRes.ok) {
+    console.error('Kimi API error:', await kimiRes.text());
     return jsonError(502, 'AI service error');
   }
 
-  const data = await claudeRes.json() as { content?: Array<{ text: string }> };
-  const answer = data.content?.[0]?.text ?? '';
+  const data = await kimiRes.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const answer = data.choices?.[0]?.message?.content ?? '';
 
   return Response.json({ answer, commitCount: limited.length });
 }
