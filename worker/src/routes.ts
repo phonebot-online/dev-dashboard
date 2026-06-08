@@ -436,7 +436,12 @@ function renderLiveFeedHtml(events: LiveEvent[], email: string): string {
 }
 
 // ============================================================================
-// PM Agent — commit-aware Kimi (Moonshot) Q&A for QA Auditor / PM / CEO
+// PM Agent — commit-aware Q&A for QA Auditor / PM / CEO.
+//
+// Provider config is read from state:config.system (same fields the SPA's
+// "Generate Insights" uses): ai_provider, ai_endpoint, ai_api_key, ai_model.
+// One Settings → AI panel drives both features; switching provider via the
+// dashboard takes effect on the next request, no redeploy/secret rotation.
 // ============================================================================
 
 interface PmAgentRequest {
@@ -450,11 +455,9 @@ async function handlePmAgent(
   env: Env,
   session: { email: string; role: string },
 ): Promise<Response> {
+  // Role gate is preserved exactly as before — devs and QA cannot ask the agent.
   if (!['pm', 'ceo', 'qa_auditor'].includes(session.role)) {
     return jsonError(403, 'insufficient role');
-  }
-  if (!env.KIMI_API_KEY) {
-    return jsonError(503, 'AI not configured — set KIMI_API_KEY secret');
   }
 
   let body: PmAgentRequest;
@@ -475,8 +478,29 @@ async function handlePmAgent(
   let config: {
     users?: Array<{ displayName: string; email: string; role: string }>;
     projects?: Array<{ name: string; deadline?: string }>;
+    system?: {
+      ai_provider?: string;
+      ai_endpoint?: string;
+      ai_api_key?: string;
+      ai_model?: string;
+    };
   } = {};
   if (rawConfig) { try { config = JSON.parse(rawConfig); } catch {} }
+
+  const sys = config.system || {};
+  const provider = sys.ai_provider;
+  if (!provider || provider === 'none') {
+    return jsonError(503, 'AI provider not configured — pick one in Settings → AI');
+  }
+  if (provider !== 'anthropic' && provider !== 'openai' && provider !== 'custom') {
+    return jsonError(503, `unknown AI provider: ${provider}`);
+  }
+  if (provider !== 'custom' && !sys.ai_api_key) {
+    return jsonError(503, 'AI API key missing — add one in Settings → AI');
+  }
+  if (provider === 'custom' && !sys.ai_endpoint) {
+    return jsonError(503, 'Custom AI endpoint missing — add one in Settings → AI');
+  }
 
   let filtered = commits;
   if (devEmail) filtered = filtered.filter(c => c.author_email === devEmail);
@@ -498,7 +522,7 @@ async function handlePmAgent(
     .map(p => `${p.name}${p.deadline ? ' (deadline: ' + p.deadline + ')' : ''}`)
     .join('\n');
 
-  const system = `You are a Project Manager AI agent for the Phonebot software team. You analyse git commit messages to assess feature and deliverable completion.
+  const systemPrompt = `You are a Project Manager AI agent for the Phonebot software team. You analyse git commit messages to assess feature and deliverable completion.
 
 When asked about a feature, module, or deliverable:
 1. Scan the commit messages for evidence of that work being done
@@ -520,38 +544,83 @@ ${projectList || 'not available'}`;
 
   const userMessage = `${filterNote ? `Commits filtered to ${filterNote}.\n\n` : ''}Commit history (${limited.length} commits):\n${commitLines}\n\n---\n\nQuestion: ${prompt}`;
 
-  // Moonshot (Kimi) is OpenAI-compatible: single `messages` array with the system
-  // prompt as a system-role message, response in choices[0].message.content.
-  // Default model is moonshot-v1-32k — the prompt can carry up to 300 commit
-  // lines (~10k tokens), which would overflow the 8k model.
-  const kimiBase = (env.KIMI_BASE_URL || 'https://api.moonshot.ai/v1').replace(/\/+$/, '');
-  const kimiModel = env.KIMI_MODEL || 'moonshot-v1-32k';
+  // Build the upstream request. Mirrors generateAIInsights() in devdash.html:
+  //   - anthropic → /v1/messages, x-api-key header, system + messages[user]
+  //   - openai    → /v1/chat/completions, Bearer header, messages[system,user]
+  //   - custom    → user-supplied URL (full path, e.g. .../chat/completions),
+  //                 Bearer header (optional), messages[system,user]; z.ai hosts
+  //                 also receive {thinking:{type:'disabled'}} so glm-4.6 routes
+  //                 to message.content instead of reasoning_content.
+  const aiEndpoint = provider === 'anthropic' ? 'https://api.anthropic.com/v1/messages'
+    : provider === 'openai' ? 'https://api.openai.com/v1/chat/completions'
+    : sys.ai_endpoint as string;
 
-  const kimiRes = await fetch(`${kimiBase}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${env.KIMI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: kimiModel,
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  let aiBody: string;
+
+  if (provider === 'anthropic') {
+    headers['x-api-key'] = sys.ai_api_key as string;
+    headers['anthropic-version'] = '2023-06-01';
+    aiBody = JSON.stringify({
+      model: sys.ai_model || 'claude-sonnet-4-5',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+  } else {
+    // openai or custom (any OpenAI-compatible /chat/completions endpoint)
+    if (sys.ai_api_key) headers['Authorization'] = `Bearer ${sys.ai_api_key}`;
+    const reqBody: Record<string, unknown> = {
+      model: sys.ai_model || (provider === 'openai' ? 'gpt-4o-mini' : 'glm-4.6'),
       max_tokens: 1024,
       messages: [
-        { role: 'system', content: system },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
-    }),
-  });
-
-  if (!kimiRes.ok) {
-    console.error('Kimi API error:', await kimiRes.text());
-    return jsonError(502, 'AI service error');
+    };
+    if (provider === 'custom' && /\.z\.ai(?:\/|$)/.test(aiEndpoint)) {
+      reqBody.thinking = { type: 'disabled' };
+    }
+    aiBody = JSON.stringify(reqBody);
   }
 
-  const data = await kimiRes.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const answer = data.choices?.[0]?.message?.content ?? '';
+  // try/catch wraps the upstream call so a network failure (DNS, TLS, timeout)
+  // returns clean JSON instead of bubbling up as an uncaught exception, which
+  // would surface as Cloudflare's generic 502 HTML page and break the SPA's
+  // `await res.json()` with "Network error — could not reach the agent."
+  let aiRes: Response;
+  try {
+    aiRes = await fetch(aiEndpoint, { method: 'POST', headers, body: aiBody });
+  } catch (e) {
+    console.error(`${provider} fetch threw:`, e instanceof Error ? e.message : String(e));
+    return jsonError(502, 'AI service unreachable');
+  }
+
+  if (!aiRes.ok) {
+    let errText = '';
+    try { errText = await aiRes.text(); } catch {}
+    console.error(`${provider} API ${aiRes.status}:`, errText.slice(0, 500));
+    return jsonError(502, `AI service error (${aiRes.status})`);
+  }
+
+  let data: any;
+  try { data = await aiRes.json(); } catch (e) {
+    console.error(`${provider} response not JSON:`, e instanceof Error ? e.message : String(e));
+    return jsonError(502, 'AI service returned invalid response');
+  }
+
+  let answer = '';
+  if (provider === 'anthropic') {
+    answer = data.content?.[0]?.text ?? '';
+  } else {
+    const msg = data.choices?.[0]?.message;
+    answer = msg?.content || '';
+    // z.ai glm-4.6 occasionally returns the answer in reasoning_content even
+    // with thinking disabled. Surface that as a labelled degraded fallback.
+    if (!answer && msg?.reasoning_content) {
+      answer = `[no final answer returned; showing degraded reasoning]\n\n${msg.reasoning_content}`;
+    }
+  }
 
   return Response.json({ answer, commitCount: limited.length });
 }
