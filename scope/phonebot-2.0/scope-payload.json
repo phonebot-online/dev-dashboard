@@ -1,0 +1,772 @@
+{
+  "project": "Phonebot 2.0",
+  "scope_in": "PHONEBOT 2.0 — SCOPE COVERAGE MAP (159 items: 140 parity + 19 go-live)\nLoaded from Scope_Coverage_Map.xlsx on 2026-06-08.\nLegend: [Px] priority · status_2.0 · coverage · track · IDs\n\n⚠️ CRITICAL P0 GAPS — NOT COVERED IN ANY TRACK (14):\n  • #39 Product SEO management — P0. Has controllers but not scoped. Faisal should verify during product page work.\n  • #40 Category CRUD — P0. Update/Delete broken. Not explicitly scoped. Must be fixed for product listing to work.\n  • #41 Manage Inventory (IMEI/serial tracking) — P0 CRITICAL. IMEI is core to business. Not scoped in tracks but MUST work. Add to Faisal Epic 3 or create new epic.\n  • #57 Order management (list/view/edit) — P0 GAP. Product rendering, IMEI assignment, return flow all broken. Not scoped. MUST add to Faisal.\n  • #62 Customer management — P0. Delete broken, personal info missing. Not scoped. Should be quick fix.\n  • #65 Dynamic state/country dropdowns — P0 GAP. Affects POS, customer forms, checkout. No state table in DB. Must fix.\n  • #70 Payment method settings — P0 GAP. Add/Update broken. Must work for payment gateway setup.\n  • #71 Shipping method settings — P0 GAP. Add/Update broken. Must work for checkout.\n  • #85 Repair orders — P0 GAP. Broken and not scoped. 641-line model in 1.0. High complexity.\n  • #107 Google Shopping feed (Merchant Center) — P0 GAP. 2.0 has GoogleMerchantService. Not scoped. Needs verification at minimum.\n  • #126 Admin user management — P0. Controllers exist. Needs verification.\n  • #129 Multi-region support (AU, UAE, NZ, UK, SA) — P0 but massive scope. Discuss with Fahad if all regions needed at launch or AU-only MVP.\n  • #131 Customer data migration (1.0 to 2.0) — P0 GAP. Migration controller exists. Needs Faizan + Faisal to execute.\n  • #132 Product/catalog data migration — P0 GAP. 302 migrations exist. Must verify data import works.\n\n== STOREFRONT — CORE SHOPPING EXPERIENCE ==\n#1 [P0] Homepage (banners, featured products, deals) — Unknown · Covered · Track 1: Faisal, IDs: F5-US04\n#2 [P0] Product listing page (category view + filters) — Partial · Covered · Track 1: Faisal, IDs: F5-US01, F5-US02\n#3 [P0] Product detail page (images, options, variants, specs) — Unknown · Covered · Track 1: Faisal, IDs: F1-US01, F1-US02, F1-US03, F1-US04, F1-US05, F1-US06\n#4 [P0] Product search (autocomplete/smart search) — Unknown · Covered · Track 1: Faisal, IDs: F5-US03\n#5 [P2] Product comparison — Not Started · Deferred to Post-Launch · None\n#6 [P1] Wishlist — Working · Partially Covered · Track 2: Contractor A, IDs: A2-US06\n#7 [P1] Deals/Special offers page — Partial · Not Covered · None\n#8 [P1] Manufacturer/Brand pages — Working · Not Covered · None\n#9 [P1] Custom URL pages (landing pages) — Unknown · Not Covered · None\n#10 [P2] Phone Finder tool — Unknown · Deferred to Post-Launch · None\n\n== CHECKOUT & CART ==\n#11 [P0] Shopping cart (add/remove/update qty) — Unknown · Covered · Track 1: Faisal, IDs: F2-US01\n#12 [P0] Guest checkout — Unknown · Covered · Track 1: Faisal, IDs: F2-US02\n#13 [P0] Registered user checkout — Unknown · Covered · Track 1: Faisal, IDs: F2-US03\n#14 [P0] Shipping address management — Unknown · Covered · Track 1: Faisal, IDs: F2-US03, F4-US03\n#15 [P0] Shipping method selection — Broken · Covered · Track 1: Faisal, IDs: F2-US04\n#16 [P0] Coupon/discount code application — Partial · Covered · Track 1: Faisal, IDs: F2-US05\n#17 [P1] Voucher system — Partial · Partially Covered · Track 1: Faisal, IDs: F2-US05\n#18 [P2] Gift wrap option — Not Started · Deferred to Post-Launch · None\n#19 [P1] Transit cover fee (shipping insurance) — Unknown · Not Covered · None\n\n== PAYMENT GATEWAYS ==\n#20 [P0] CyberSource (primary card processor) — Unknown · Covered · Track 1: Faisal, IDs: F3-US01\n#21 [P0] PayPal — Unknown · Covered · Track 1: Faisal, IDs: F3-US02\n#22 [P0] Afterpay — Unknown · Covered · Track 1: Faisal, IDs: F3-US03\n#23 [P0] Zip Pay / Zip Money — Unknown · Covered · Track 1: Faisal, IDs: F3-US04\n#24 [P1] Google Pay — Not Started · Not Covered · None\n#25 [P2] Bank Transfer / COD — Not Started · Deferred to Post-Launch · None\n#26 [P0] Payment method admin management — Broken · Partially Covered · Track 1: Faisal\n\n== CUSTOMER ACCOUNTS ==\n#27 [P0] Registration (email) — Unknown · Covered · Track 1: Faisal, IDs: F4-US01\n#28 [P0] Login (email/password) — Unknown · Covered · Track 1: Faisal, IDs: F4-US01\n#29 [P1] Social login (Google, Apple, Facebook) — Unknown · Covered · Track 1 + Track 2, IDs: F4-US01, A2-US01\n#30 [P0] Forgot/reset password — Unknown · Covered · Track 1: Faisal, IDs: F4-US01\n#31 [P0] Order history + invoice view — Unknown · Covered · Track 1: Faisal, IDs: F4-US02\n#32 [P0] Address book management — Unknown · Covered · Track 1: Faisal, IDs: F4-US03\n#33 [P0] Return requests (customer-initiated) — Working · Covered · Track 1: Faisal, IDs: F4-US04\n#34 [P1] Repair order portal (customer view) — Unknown · Not Covered · None\n#35 [P2] Reward/loyalty points — Unknown · Deferred to Post-Launch · None\n#36 [P2] Newsletter subscription — Unknown · Deferred to Post-Launch · None\n#37 [P2] Customer feedback — Unknown · Deferred to Post-Launch · None\n\n== ADMIN — CATALOG & INVENTORY ==\n#38 [P0] Product CRUD (add/edit/delete/list) — Working · Already Done · None\n#39 [P0] Product SEO management — Unknown · Not Covered · None\n#40 [P0] Category CRUD — Partial · Not Covered · None\n#41 [P0] Manage Inventory (IMEI/serial tracking) — Partial · Not Covered · None\n#42 [P0] Batch management — Working · Already Done · None\n#43 [P1] Transit batch tracking — Unknown · Not Covered · None\n#44 [P1] Inventory locations — Partial · Not Covered · None\n#45 [P1] Faulty serials management — Working · Already Done · None\n#46 [P1] Product attributes — Partial · Not Covered · None\n#47 [P1] Product spec attributes — Partial · Not Covered · None\n#48 [P1] Product add-ons — Partial · Not Covered · None\n#49 [P2] Value added cost — Unknown · Deferred to Post-Launch · None\n#50 [P1] Fault types management — Broken · Not Covered · None\n#51 [P1] Return actions management — Broken · Not Covered · None\n#52 [P1] Tax management — Working · Already Done · None\n#53 [P1] Manufacturer CRUD — Working · Already Done · None\n#54 [P2] Notify Me (back in stock) — Working · Already Done · None\n#55 [P0] Redirects management — Unknown · Covered · Track 3: Contractor B, IDs: B1-US01, B1-US02\n#56 [P2] Product collections — Unknown · Deferred to Post-Launch · None\n\n== ADMIN — ORDERS & RETURNS ==\n#57 [P0] Order management (list/view/edit) — Partial · Not Covered · None\n#58 [P1] Order PDF export — Unknown · Not Covered · None\n#59 [P0] Return management — Working · Already Done · None\n#60 [P0] Return requests management — Working · Already Done · None\n#61 [P2] Abandoned cart tracking — Unknown · Deferred to Post-Launch · None\n\n== ADMIN — CUSTOMERS ==\n#62 [P0] Customer management — Partial · Not Covered · None\n#63 [P0] Customer groups — Working · Already Done · None\n#64 [P1] Wholesaler applicants — Not Started · Not Covered · None\n#65 [P0] Dynamic state/country dropdowns — Broken · Not Covered · None\n\n== ADMIN — SYSTEM SETTINGS ==\n#66 [P1] Countries management — Partial · Not Covered · None\n#67 [P2] Languages management — Partial · Deferred to Post-Launch · None\n#68 [P1] Status management — Partial · Not Covered · None\n#69 [P1] Currency management — Working · Already Done · None\n#70 [P0] Payment method settings — Broken · Not Covered · None\n#71 [P0] Shipping method settings — Broken · Not Covered · None\n#72 [P1] Dynamic fields — Broken · Not Covered · None\n#73 [P0] Site settings (general, store, social) — Working · Already Done · None\n\n== POINT OF SALE (POS / WKPOS) ==\n#74 [P1] POS user management — Working · Already Done · None\n#75 [P1] POS create user (state dropdown fix) — Partial · Not Covered · None\n#76 [P1] POS products — Working · Already Done · None\n#77 [P1] POS orders — Partial · Not Covered · None\n#78 [P1] POS returns — Broken · Not Covered · None\n#79 [P1] POS outlets — Broken · Not Covered · None\n#80 [P2] POS restock requests — Unknown · Deferred to Post-Launch · None\n#81 [P1] POS checkout flow — Unknown · Not Covered · None\n#82 [P1] Barcode scanning — Unknown · Not Covered · None\n\n== REPAIR MANAGEMENT ==\n#83 [P1] Repair device categories — Working · Already Done · None\n#84 [P1] Repair device management — Partial · Not Covered · None\n#85 [P0] Repair orders — Broken · Not Covered · None\n#86 [P1] Repair issues tracking — Broken · Not Covered · None\n#87 [P1] Repair inventory — Broken · Not Covered · None\n#88 [P1] Technician damages tracking — Broken · Not Covered · None\n#89 [P1] Service provider management — Broken · Not Covered · None\n\n== DESIGN & CMS ==\n#90 [P1] Home banner management — Broken · Not Covered · None\n#91 [P2] Layout management — Broken · Deferred to Post-Launch · None\n#92 [P1] Banner management — Partial · Not Covered · None\n#93 [P2] Blog categories — Working · Already Done · None\n#94 [P2] Blog articles — Partial · Deferred to Post-Launch · None\n#95 [P2] Blog authors — Working · Already Done · None\n#96 [P2] FAQ types — Partial · Deferred to Post-Launch · None\n#97 [P2] FAQs — Partial · Deferred to Post-Launch · None\n#98 [P1] CMS/Information pages — Unknown · Not Covered · None\n\n== WHOLESALE & BUYBACK ==\n#99 [P1] Wholesale application form — Not Started · Not Covered · None\n#100 [P1] Wholesale product catalog — Not Started · Not Covered · None\n#101 [P1] Wholesale login/portal — Not Started · Not Covered · None\n#102 [P1] Sell My Phone (buyback form) — Not Started · Not Covered · None\n#103 [P1] Buyback account/login — Not Started · Not Covered · None\n\n== SEO, FEEDS & MARKETING INTEGRATIONS ==\n#104 [P0] SEO-friendly URLs (slugs) — Unknown · Partially Covered · Track 1: Faisal\n#105 [P0] 301 redirect mapping (1.0 to 2.0 URLs) — Not Started · Covered · Track 3: Contractor B, IDs: B1-US01, B1-US02, B1-US03\n#106 [P0] XML Sitemap generation — Unknown · Covered · Track 3: Contractor B, IDs: B2-US05\n#107 [P0] Google Shopping feed (Merchant Center) — Unknown · Not Covered · None\n#108 [P1] ProfitMetrics feed — Unknown · Not Covered · None\n#109 [P0] Google Ads conversion tracking — Not Started · Covered · Track 3: Contractor B, IDs: B2-US03\n#110 [P0] Facebook Pixel + Conversions API — Not Started · Covered · Track 2 + Track 3\n#111 [P1] TikTok Pixel tracking — Not Started · Not Covered · None\n#112 [P2] Bing tracking — Not Started · Deferred to Post-Launch · None\n#113 [P2] SMS marketing (BulkGate) — Unknown · Deferred to Post-Launch · None\n#114 [P2] Email responders/automation — Unknown · Deferred to Post-Launch · None\n\n== MARKETPLACE INTEGRATIONS ==\n#115 [P3] Catch.com.au integration — Not Started · Deferred to Post-Launch · None\n#116 [P3] eBay integration (OpenBay) — Not Started · Deferred to Post-Launch · None\n#117 [P3] Amazon integration — Not Started · Deferred to Post-Launch · None\n#118 [P3] MyDeal integration — Not Started · Deferred to Post-Launch · None\n#119 [P2] Phonebot Marketplace — Not Started · Deferred to Post-Launch · None\n\n== ADMIN — REPORTING ==\n#120 [P1] Sales reports — Unknown · Not Covered · None\n#121 [P2] Customer reports — Unknown · Deferred to Post-Launch · None\n#122 [P2] Product reports — Unknown · Deferred to Post-Launch · None\n#123 [P2] Marketing reports — Unknown · Deferred to Post-Launch · None\n#124 [P1] Dashboard (overview, charts) — Unknown · Not Covered · None\n\n== ADMIN — SUPPLIER & USER MANAGEMENT ==\n#125 [P1] Supplier management — Partial · Not Covered · None\n#126 [P0] Admin user management — Unknown · Not Covered · None\n#127 [P1] Role-based access control (RBAC) — Unknown · Not Covered · None\n#128 [P2] Internal ticketing system — Unknown · Deferred to Post-Launch · None\n\n== INFRASTRUCTURE & DATA MIGRATION ==\n#129 [P0] Multi-region support (AU, UAE, NZ, UK, SA) — Unknown · Not Covered · None\n#130 [P0] Image upload + CDN — Partial · Partially Covered · Track 2: Contractor A, IDs: A3-US01\n#131 [P0] Customer data migration (1.0 to 2.0) — Unknown · Not Covered · None\n#132 [P0] Product/catalog data migration — Unknown · Not Covered · None\n#133 [P0] SEO URL mapping (preserve rankings) — Not Started · Covered · Track 3: Contractor B, IDs: B1-US01, B1-US02, B1-US03\n#134 [P1] Cron jobs (order processing, inventory sync) — Unknown · Not Covered · None\n#135 [P0] Email notifications (order confirm, shipping) — Unknown · Partially Covered · Track 1: Faisal, IDs: F4-US05\n\n== NEW FEATURES IN 2.0 (NOT IN 1.0) ==\n#136 [P2] Royalty points/loyalty program — Unknown · Deferred to Post-Launch · None\n#137 [P3] Payroll management — Unknown · Deferred to Post-Launch · None\n#138 [P3] Jobs/careers portal — Unknown · Deferred to Post-Launch · None\n#139 [P2] Refer a friend / invitation system — Unknown · Deferred to Post-Launch · None\n#140 [P3] Get the code (coupon sharing?) — Unknown · Deferred to Post-Launch · None\n\n== GO-LIVE CHECKLIST ==\n#GL-1 [P0] Credential rotation & git purge — Open · Covered · Track 2: Contractor A, IDs: A1-US01, A1-US02, A1-US03\n#GL-2 [P0] .env restructure (public vs server-only) — Open · Covered · Track 2: Contractor A, IDs: A1-US02\n#GL-3 [P0] NextAuth security fix (debug, PII, IP) — Open · Covered · Track 2: Contractor A, IDs: A2-US01\n#GL-4 [P0] HTTP security headers (CSP, HSTS, etc) — Open · Covered · Track 2: Contractor A, IDs: A2-US02\n#GL-5 [P0] Remove dangerous endpoints & dead code — Open · Covered · Track 2: Contractor A, IDs: A2-US03\n#GL-6 [P0] Facebook Pixel PII removal — Open · Covered · Track 2: Contractor A, IDs: A2-US04\n#GL-7 [P1] Error boundary component — Open · Covered · Track 2: Contractor A, IDs: A2-US05\n#GL-8 [P1] Protected route middleware fix — Open · Covered · Track 2: Contractor A, IDs: A2-US06\n#GL-9 [P1] Image optimization enabled — Open · Covered · Track 2: Contractor A, IDs: A3-US01\n#GL-10 [P1] SSR canonical URLs & OG meta tags — Open · Covered · Track 2: Contractor A, IDs: A3-US02\n#GL-11 [P2] Cart localStorage debouncing — Open · Covered · Track 2: Contractor A, IDs: A3-US03\n#GL-12 [P1] CI/CD pipeline (GitHub Actions) — Open · Covered · Track 2: Contractor A, IDs: A4-US01\n#GL-13 [P1] Branch protection & PR workflow — Open · Covered · Track 2: Contractor A, IDs: A1-US04\n#GL-14 [P1] JSON-LD structured data (Product schema) — Open · Covered · Track 3: Contractor B, IDs: B2-US01\n#GL-15 [P0] GA4 configuration & verification — Open · Covered · Track 3: Contractor B, IDs: B2-US02\n#GL-16 [P1] Retell AI FAQ knowledge base — Open · Covered · Track 3: Contractor B, IDs: B3-US01\n#GL-17 [P1] Retell AI grading knowledge base — Open · Covered · Track 3: Contractor B, IDs: B3-US02\n#GL-18 [P1] Retell AI repair pricing knowledge base — Open · Covered · Track 3: Contractor B, IDs: B3-US03\n#GL-19 [P1] Retell AI warranty knowledge base — Open · Covered · Track 3: Contractor B, IDs: B3-US04",
+  "cards": [
+    {
+      "id": 810001,
+      "title": "#1 Homepage (banners, featured products, deals) [F5-US04]",
+      "category": "Storefront",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 1,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F5-US04"
+      ]
+    },
+    {
+      "id": 810002,
+      "title": "#2 Product listing page (category view + filters) [F5-US01, F5-US02]",
+      "category": "Storefront",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 2,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F5-US01",
+        "F5-US02"
+      ]
+    },
+    {
+      "id": 810003,
+      "title": "#3 Product detail page (images, options, variants, specs) [F1-US01, F1-US02, F1-US03, F1-US04, F1-US05, F1-US06]",
+      "category": "Storefront",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 3,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F1-US01",
+        "F1-US02",
+        "F1-US03",
+        "F1-US04",
+        "F1-US05",
+        "F1-US06"
+      ]
+    },
+    {
+      "id": 810004,
+      "title": "#4 Product search (autocomplete/smart search) [F5-US03]",
+      "category": "Storefront",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 4,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F5-US03"
+      ]
+    },
+    {
+      "id": 810011,
+      "title": "#11 Shopping cart (add/remove/update qty) [F2-US01]",
+      "category": "Checkout",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 11,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F2-US01"
+      ]
+    },
+    {
+      "id": 810012,
+      "title": "#12 Guest checkout [F2-US02]",
+      "category": "Checkout",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 12,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F2-US02"
+      ]
+    },
+    {
+      "id": 810013,
+      "title": "#13 Registered user checkout [F2-US03]",
+      "category": "Checkout",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 13,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F2-US03"
+      ]
+    },
+    {
+      "id": 810014,
+      "title": "#14 Shipping address management [F2-US03, F4-US03]",
+      "category": "Checkout",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 14,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F2-US03",
+        "F4-US03"
+      ]
+    },
+    {
+      "id": 810015,
+      "title": "#15 Shipping method selection [F2-US04]",
+      "category": "Checkout",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 15,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F2-US04"
+      ]
+    },
+    {
+      "id": 810016,
+      "title": "#16 Coupon/discount code application [F2-US05]",
+      "category": "Checkout",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 16,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F2-US05"
+      ]
+    },
+    {
+      "id": 810020,
+      "title": "#20 CyberSource (primary card processor) [F3-US01]",
+      "category": "Payments",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 20,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F3-US01"
+      ]
+    },
+    {
+      "id": 810021,
+      "title": "#21 PayPal [F3-US02]",
+      "category": "Payments",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 21,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F3-US02"
+      ]
+    },
+    {
+      "id": 810022,
+      "title": "#22 Afterpay [F3-US03]",
+      "category": "Payments",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 22,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F3-US03"
+      ]
+    },
+    {
+      "id": 810023,
+      "title": "#23 Zip Pay / Zip Money [F3-US04]",
+      "category": "Payments",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 23,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F3-US04"
+      ]
+    },
+    {
+      "id": 810026,
+      "title": "#26 Payment method admin management",
+      "category": "Payments",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 26,
+      "priority": "P0",
+      "coverage": "Partially Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810027,
+      "title": "#27 Registration (email) [F4-US01]",
+      "category": "Accounts",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 27,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F4-US01"
+      ]
+    },
+    {
+      "id": 810028,
+      "title": "#28 Login (email/password) [F4-US01]",
+      "category": "Accounts",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 28,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F4-US01"
+      ]
+    },
+    {
+      "id": 810030,
+      "title": "#30 Forgot/reset password [F4-US01]",
+      "category": "Accounts",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 30,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F4-US01"
+      ]
+    },
+    {
+      "id": 810031,
+      "title": "#31 Order history + invoice view [F4-US02]",
+      "category": "Accounts",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 31,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F4-US02"
+      ]
+    },
+    {
+      "id": 810032,
+      "title": "#32 Address book management [F4-US03]",
+      "category": "Accounts",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 32,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F4-US03"
+      ]
+    },
+    {
+      "id": 810033,
+      "title": "#33 Return requests (customer-initiated) [F4-US04]",
+      "category": "Accounts",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 33,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "F4-US04"
+      ]
+    },
+    {
+      "id": 810038,
+      "title": "#38 Product CRUD (add/edit/delete/list)",
+      "category": "Admin Catalog",
+      "owner_email": "",
+      "status": "done",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 38,
+      "priority": "P0",
+      "coverage": "Already Done",
+      "story_ids": []
+    },
+    {
+      "id": 810039,
+      "title": "⚠️ #39 Product SEO management",
+      "category": "Admin Catalog",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 39,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810040,
+      "title": "⚠️ #40 Category CRUD",
+      "category": "Admin Catalog",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 40,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810041,
+      "title": "⚠️ #41 Manage Inventory (IMEI/serial tracking)",
+      "category": "Admin Catalog",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 41,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810042,
+      "title": "#42 Batch management",
+      "category": "Admin Catalog",
+      "owner_email": "",
+      "status": "done",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 42,
+      "priority": "P0",
+      "coverage": "Already Done",
+      "story_ids": []
+    },
+    {
+      "id": 810055,
+      "title": "#55 Redirects management [B1-US01, B1-US02]",
+      "category": "Admin Catalog",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 55,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "B1-US01",
+        "B1-US02"
+      ]
+    },
+    {
+      "id": 810057,
+      "title": "⚠️ #57 Order management (list/view/edit)",
+      "category": "Admin Orders",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 57,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810059,
+      "title": "#59 Return management",
+      "category": "Admin Orders",
+      "owner_email": "",
+      "status": "done",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 59,
+      "priority": "P0",
+      "coverage": "Already Done",
+      "story_ids": []
+    },
+    {
+      "id": 810060,
+      "title": "#60 Return requests management",
+      "category": "Admin Orders",
+      "owner_email": "",
+      "status": "done",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 60,
+      "priority": "P0",
+      "coverage": "Already Done",
+      "story_ids": []
+    },
+    {
+      "id": 810062,
+      "title": "⚠️ #62 Customer management",
+      "category": "Admin Customers",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 62,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810063,
+      "title": "#63 Customer groups",
+      "category": "Admin Customers",
+      "owner_email": "",
+      "status": "done",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 63,
+      "priority": "P0",
+      "coverage": "Already Done",
+      "story_ids": []
+    },
+    {
+      "id": 810065,
+      "title": "⚠️ #65 Dynamic state/country dropdowns",
+      "category": "Admin Customers",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 65,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810070,
+      "title": "⚠️ #70 Payment method settings",
+      "category": "Admin Settings",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 70,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810071,
+      "title": "⚠️ #71 Shipping method settings",
+      "category": "Admin Settings",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 71,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810073,
+      "title": "#73 Site settings (general, store, social)",
+      "category": "Admin Settings",
+      "owner_email": "",
+      "status": "done",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 73,
+      "priority": "P0",
+      "coverage": "Already Done",
+      "story_ids": []
+    },
+    {
+      "id": 810085,
+      "title": "⚠️ #85 Repair orders",
+      "category": "Repairs",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 85,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810104,
+      "title": "#104 SEO-friendly URLs (slugs)",
+      "category": "SEO",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 104,
+      "priority": "P0",
+      "coverage": "Partially Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810105,
+      "title": "#105 301 redirect mapping (1.0 to 2.0 URLs) [B1-US01, B1-US02, B1-US03]",
+      "category": "SEO",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 105,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "B1-US01",
+        "B1-US02",
+        "B1-US03"
+      ]
+    },
+    {
+      "id": 810106,
+      "title": "#106 XML Sitemap generation [B2-US05]",
+      "category": "SEO",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 106,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "B2-US05"
+      ]
+    },
+    {
+      "id": 810107,
+      "title": "⚠️ #107 Google Shopping feed (Merchant Center)",
+      "category": "SEO",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 107,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810109,
+      "title": "#109 Google Ads conversion tracking [B2-US03]",
+      "category": "Marketing",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 109,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "B2-US03"
+      ]
+    },
+    {
+      "id": 810110,
+      "title": "#110 Facebook Pixel + Conversions API",
+      "category": "Marketing",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 110,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810126,
+      "title": "⚠️ #126 Admin user management",
+      "category": "Users",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 126,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810129,
+      "title": "⚠️ #129 Multi-region support (AU, UAE, NZ, UK, SA)",
+      "category": "Infra",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 129,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810130,
+      "title": "#130 Image upload + CDN [A3-US01]",
+      "category": "Infra",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 130,
+      "priority": "P0",
+      "coverage": "Partially Covered",
+      "story_ids": [
+        "A3-US01"
+      ]
+    },
+    {
+      "id": 810131,
+      "title": "⚠️ #131 Customer data migration (1.0 to 2.0)",
+      "category": "Migration",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 131,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810132,
+      "title": "⚠️ #132 Product/catalog data migration",
+      "category": "Migration",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 132,
+      "priority": "P0",
+      "coverage": "Not Covered",
+      "story_ids": []
+    },
+    {
+      "id": 810133,
+      "title": "#133 SEO URL mapping (preserve rankings) [B1-US01, B1-US02, B1-US03]",
+      "category": "Migration",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 133,
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "B1-US01",
+        "B1-US02",
+        "B1-US03"
+      ]
+    },
+    {
+      "id": 810135,
+      "title": "#135 Email notifications (order confirm, shipping) [F4-US05]",
+      "category": "Infra",
+      "owner_email": "faisal@phonebot.com.au",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": 135,
+      "priority": "P0",
+      "coverage": "Partially Covered",
+      "story_ids": [
+        "F4-US05"
+      ]
+    },
+    {
+      "id": 810000,
+      "title": "#GL-1 Credential rotation & git purge [A1-US01, A1-US02, A1-US03]",
+      "category": "Security",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": "GL-1",
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "A1-US01",
+        "A1-US02",
+        "A1-US03"
+      ]
+    },
+    {
+      "id": 810000,
+      "title": "#GL-2 .env restructure (public vs server-only) [A1-US02]",
+      "category": "Security",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": "GL-2",
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "A1-US02"
+      ]
+    },
+    {
+      "id": 810000,
+      "title": "#GL-3 NextAuth security fix (debug, PII, IP) [A2-US01]",
+      "category": "Security",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": "GL-3",
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "A2-US01"
+      ]
+    },
+    {
+      "id": 810000,
+      "title": "#GL-4 HTTP security headers (CSP, HSTS, etc) [A2-US02]",
+      "category": "Security",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": "GL-4",
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "A2-US02"
+      ]
+    },
+    {
+      "id": 810000,
+      "title": "#GL-5 Remove dangerous endpoints & dead code [A2-US03]",
+      "category": "Security",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": "GL-5",
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "A2-US03"
+      ]
+    },
+    {
+      "id": 810000,
+      "title": "#GL-6 Facebook Pixel PII removal [A2-US04]",
+      "category": "Security",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": "GL-6",
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "A2-US04"
+      ]
+    },
+    {
+      "id": 810000,
+      "title": "#GL-15 GA4 configuration & verification [B2-US02]",
+      "category": "Marketing",
+      "owner_email": "",
+      "status": "todo",
+      "created_at": "2026-06-08T00:00:00Z",
+      "scope_n": "GL-15",
+      "priority": "P0",
+      "coverage": "Covered",
+      "story_ids": [
+        "B2-US02"
+      ]
+    }
+  ]
+}

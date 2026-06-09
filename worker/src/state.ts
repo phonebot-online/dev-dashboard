@@ -19,6 +19,7 @@ export const COLLECTIONS = [
   'handoffs',
   'offProject',
   'queue',
+  'launchChecklist',
   'commits',
   'config',
 ] as const;

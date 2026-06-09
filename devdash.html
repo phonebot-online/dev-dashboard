@@ -369,13 +369,13 @@
   <div class="px-6 pt-5 border-b border-white/5">
     <div class="flex gap-1 bg-black/30 inline-flex p-1 rounded-lg flex-wrap">
       <template x-for="tab in visibleRoleTabs()" :key="tab">
-        <button @click="activeRoleTab = tab" class="tab-btn" :class="{'active': activeRoleTab === tab}" x-text="(tab === 'settings' ? '⚙ Settings' : roleLabel(tab) + ' view')"></button>
+        <button @click="activeRoleTab = tab" class="tab-btn" :class="{'active': activeRoleTab === tab}" x-text="tab === 'settings' ? '⚙ Settings' : tab === 'roadmap' ? '🚀 Roadmap' : roleLabel(tab) + ' view'"></button>
       </template>
     </div>
   </div>
 
   <!-- Project sub-tabs -->
-  <div x-show="activeRoleTab !== 'settings'" class="px-6 py-3 border-b border-white/5 flex items-center gap-2 flex-wrap">
+  <div x-show="activeRoleTab !== 'settings' && activeRoleTab !== 'roadmap'" class="px-6 py-3 border-b border-white/5 flex items-center gap-2 flex-wrap">
     <button @click="activeProject = 'all'" class="proj-btn" :class="{'active': activeProject === 'all'}">All Projects (<span x-text="config.projects.length"></span>)</button>
     <template x-for="p in config.projects" :key="p.id">
       <button @click="activeProject = p.id" class="proj-btn flex items-center gap-2" :class="{'active': activeProject === p.id}">
@@ -386,6 +386,93 @@
   </div>
 
   <div class="p-6">
+
+    <!-- ============================================== -->
+    <!-- ROADMAP — Phonebot 2.0 launch checklist        -->
+    <!-- ============================================== -->
+    <div x-show="activeRoleTab === 'roadmap'" class="fade-in space-y-6">
+      <!-- Header + overall progress -->
+      <div class="card panel-banner p-4 hero-ambient">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <div class="text-[10px] tracking-widest uppercase" style="color: var(--accent)">🚀 Phonebot 2.0 launch</div>
+            <div class="text-lg font-semibold mt-1" style="color: var(--text)">Launch readiness checklist</div>
+            <div class="text-xs mt-1" style="color: var(--text-muted)">
+              <span x-text="roadmapProgress().done"></span> of <span x-text="roadmapProgress().total"></span> items complete
+              <template x-if="!canEditRoadmap()"><span class="ml-2 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-500/10">read-only</span></template>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-3xl font-bold tabular-nums" :style="'color: ' + (roadmapProgress().pct === 100 ? 'var(--accent)' : 'var(--text)')" x-text="roadmapProgress().pct + '%'"></div>
+          </div>
+        </div>
+        <div class="mt-3 h-2 rounded-full overflow-hidden" style="background: var(--border)">
+          <div class="h-full rounded-full transition-all" style="background: var(--accent)" :style="'width: ' + roadmapProgress().pct + '%'"></div>
+        </div>
+      </div>
+
+      <!-- Add item (PM / CEO only) -->
+      <template x-if="canEditRoadmap()">
+        <div>
+          <template x-if="!showRoadmapForm">
+            <button @click="showRoadmapForm = true" class="secondary text-xs">+ Add launch item</button>
+          </template>
+          <template x-if="showRoadmapForm">
+            <div class="card p-4 space-y-3">
+              <input x-model="roadmapDraft.title" type="text" placeholder="What needs to happen before launch?" @keydown.enter="addRoadmapItem()">
+              <div class="flex flex-wrap items-center gap-3">
+                <select x-model="roadmapDraft.category" class="w-auto py-2">
+                  <template x-for="c in ROADMAP_CATEGORIES" :key="c"><option :value="c" x-text="c"></option></template>
+                </select>
+                <select x-model="roadmapDraft.owner_email" class="w-auto py-2">
+                  <option value="">Unassigned</option>
+                  <template x-for="u in (config.users || []).filter(x => x.status === 'active')" :key="u.email"><option :value="u.email" x-text="u.displayName"></option></template>
+                </select>
+                <div class="flex gap-2 ml-auto">
+                  <button @click="addRoadmapItem()" class="primary text-xs">Add item</button>
+                  <button @click="showRoadmapForm = false; roadmapDraft.title = ''" class="secondary text-xs">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- Empty state -->
+      <template x-if="launchChecklist.length === 0">
+        <div class="card p-8 text-center text-sm" style="color: var(--text-muted)">No launch items yet. <template x-if="canEditRoadmap()"><span>Add the first one above.</span></template></div>
+      </template>
+
+      <!-- Category groups -->
+      <template x-for="cat in roadmapUsedCategories()" :key="cat">
+        <div class="card p-0 overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-2.5" style="background: var(--accent-dim); border-bottom: 1px solid var(--border)">
+            <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--text)" x-text="cat"></div>
+            <div class="text-[11px] tabular-nums" style="color: var(--text-muted)"><span x-text="roadmapCatProgress(cat).done"></span>/<span x-text="roadmapCatProgress(cat).total"></span></div>
+          </div>
+          <div>
+            <template x-for="item in roadmapItemsIn(cat)" :key="item.id">
+              <div class="flex items-center gap-3 px-4 py-2.5" style="border-bottom: 1px solid var(--border)">
+                <input type="checkbox" :checked="item.status === 'done'" :disabled="!canEditRoadmap()" @change="toggleRoadmapDone(item)" style="width:16px;height:16px;padding:0;margin:0;flex:0 0 auto;accent-color:var(--accent);cursor:pointer">
+                <div class="flex-1 text-sm" :class="item.status === 'done' ? 'line-through opacity-60' : ''" style="color: var(--text)" x-text="item.title"></div>
+                <div class="text-[11px] hidden sm:block whitespace-nowrap" style="color: var(--text-muted)" x-text="'@' + roadmapOwnerName(item.owner_email)"></div>
+                <template x-if="canEditRoadmap()">
+                  <select :value="item.status" @change="setRoadmapStatus(item, $event.target.value)" class="w-auto py-1 px-2 text-[11px] rounded" :class="roadmapStatusClass(item.status)">
+                    <template x-for="s in ROADMAP_STATUSES" :key="s.id"><option :value="s.id" x-text="s.label"></option></template>
+                  </select>
+                </template>
+                <template x-if="!canEditRoadmap()">
+                  <span class="text-[11px] px-2 py-0.5 rounded whitespace-nowrap" :class="roadmapStatusClass(item.status)" x-text="roadmapStatusLabel(item.status)"></span>
+                </template>
+                <template x-if="canEditRoadmap()">
+                  <button @click="removeRoadmapItem(item)" class="text-rose-400 text-xs leading-none opacity-50 hover:opacity-100" title="Remove item">✕</button>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
 
     <!-- ============================================== -->
     <!-- CEO VIEW                                       -->
@@ -3335,6 +3422,34 @@ function devdash() {
     queue: [], // [{id, dev_email, ticket, title, priority, created_at}] — server-backed dev "queue next week" (GAP-10b)
     showQueueForm: false,
     newQueueItem: { ticket: '', title: '', priority: 'medium' },
+    // Phonebot 2.0 launch roadmap — shared checklist. Everyone sees it; PM/CEO edit.
+    // Server-backed via state:launchChecklist. Items: {id,title,category,owner_email,status,created_at}.
+    // status ∈ todo | in_progress | blocked | done. The list below is the starter
+    // draft (from QA findings + ops docs) — the team edits/removes it in the UI.
+    showRoadmapForm: false,
+    roadmapDraft: { title: '', category: 'QA', owner_email: '' },
+    launchChecklist: [
+      { id: 7001, title: 'Resolve loyalty fields showing -0.00 at zero balance (QA-036/037)', category: 'QA', owner_email: 'faisal@phonebot.com.au', status: 'done', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7002, title: 'Close all open P1/P2 parity bugs vs live', category: 'QA', owner_email: 'faisal@phonebot.com.au', status: 'in_progress', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7003, title: 'Full checkout end-to-end regression pass', category: 'QA', owner_email: 'mustafa@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7004, title: 'Fix iPhone series navigation sort order (QA-038)', category: 'QA', owner_email: 'faisal@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7005, title: 'Confirm scheduled delivery date/time picker — launch or post-launch (QA-059)', category: 'Product', owner_email: 'fahad@phonebot.com.au', status: 'blocked', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7006, title: 'Sync hero campaign creative on dev (QA-051)', category: 'Product', owner_email: 'faisal@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7007, title: 'Confirm correct Afterpay limit ($4,000 vs $1,000) with Fahad (QA-058)', category: 'Payments', owner_email: 'fahad@phonebot.com.au', status: 'blocked', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7008, title: 'Verify live payment gateway credentials in production', category: 'Payments', owner_email: 'faisal@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7009, title: 'Provision production KV namespace + worker bindings', category: 'Infra', owner_email: 'faisal@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7010, title: 'DNS cutover devdash → production domain', category: 'Infra', owner_email: 'faisal@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7011, title: 'Verify production backups + run a restore drill', category: 'Infra', owner_email: 'faisal@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7012, title: 'Investigate dev TTFB regression — 759ms vs 234ms live (QA-055)', category: 'Infra', owner_email: 'faisal@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7013, title: 'TikTok pixel go/no-go decision (QA-060)', category: 'Marketing', owner_email: 'fahad@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7014, title: 'Populate GTM container with launch tracking tags', category: 'Marketing', owner_email: 'mustafa@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7015, title: 'Draft launch announcement comms', category: 'Marketing', owner_email: 'pm@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7016, title: 'Review Easy Returns / returns policy copy (QA-052)', category: 'Legal', owner_email: 'pm@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7017, title: 'Update Privacy Policy + Terms for 2.0', category: 'Legal', owner_email: 'pm@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7018, title: 'Go / no-go sign-off (CEO)', category: 'Launch Ops', owner_email: 'fahad@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7019, title: 'Document rollback plan', category: 'Launch Ops', owner_email: 'faisal@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+      { id: 7020, title: 'On-call rota for launch week', category: 'Launch Ops', owner_email: 'pm@phonebot.com.au', status: 'todo', created_at: '2026-05-19T00:00:00Z' },
+    ],
     pendingQrEmail: '',
     showProjectDetail: false, activeProjectDetailId: null, projectDetailEdit: false,
     showDecisionsModal: false, newBlocker: { title: '', waiting_on: 'Fahad', project: '' },
@@ -3780,7 +3895,7 @@ function devdash() {
       }
       const defaultConfig = JSON.parse(JSON.stringify(this.config));
       this.corruptStorageKeys = [];
-      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','offProject','queue','aiInsightsCache','devMockData'].forEach(key => {
+      ['bugs','auditFindings','featureRequests','config','clockEntries','blockers','stuckPrs','disputes','pmAssessments','growthLog','rewardEvents','payoutBatches','regressionCandidates','auditLog','offProject','queue','launchChecklist','aiInsightsCache','devMockData'].forEach(key => {
         const s = localStorage.getItem('devdash_' + key);
         // L11 FIX — don't silently swallow corrupt keys; log + surface to user so months of data don't vanish unnoticed
         if (s) {
@@ -4185,7 +4300,7 @@ function devdash() {
     _STATE_COLLECTIONS: new Set([
       'bugs','auditFindings','featureRequests','disputes','blockers','stuckPrs',
       'regressionCandidates','rewardEvents','payoutBatches','pmAssessments',
-      'clockEntries','growthLog','auditLog','handoffs','offProject','queue','commits','config',
+      'clockEntries','growthLog','auditLog','handoffs','offProject','queue','launchChecklist','commits','config',
     ]),
     _READONLY_COLLECTIONS: new Set(['commits']),
     storageFull: false, _storageWarnedOnce: false, corruptStorageKeys: [],
@@ -4194,7 +4309,7 @@ function devdash() {
     nextId() {
       if (!this._idCounter) {
         const ids = [];
-        for (const arr of [this.bugs, this.auditFindings, this.featureRequests, this.disputes, this.blockers, this.stuckPrs, this.regressionCandidates, this.pmAssessments, this.rewardEvents, this.payoutBatches, this.auditLog, this.offProject, this.queue]) {
+        for (const arr of [this.bugs, this.auditFindings, this.featureRequests, this.disputes, this.blockers, this.stuckPrs, this.regressionCandidates, this.pmAssessments, this.rewardEvents, this.payoutBatches, this.auditLog, this.offProject, this.queue, this.launchChecklist]) {
           if (Array.isArray(arr)) for (const x of arr) if (x && typeof x.id === 'number') ids.push(x.id);
         }
         this._idCounter = ids.length ? Math.max(...ids) : Date.now();
@@ -4243,14 +4358,86 @@ function devdash() {
       }
     },
 
+    // ── Phonebot 2.0 launch roadmap ─────────────────────────────────────────
+    ROADMAP_CATEGORIES: ['QA','Product','Payments','Infra','Marketing','Legal','Launch Ops'],
+    ROADMAP_STATUSES: [
+      { id: 'todo', label: 'To do' },
+      { id: 'in_progress', label: 'In progress' },
+      { id: 'blocked', label: 'Blocked' },
+      { id: 'done', label: 'Done' },
+    ],
+    canEditRoadmap() { return ['pm','ceo'].includes(this.currentUser?.role); },
+    roadmapItemsIn(cat) { return this.launchChecklist.filter(i => i.category === cat); },
+    // Categories in canonical order, then any custom ones the team added, appended.
+    roadmapUsedCategories() {
+      const present = new Set(this.launchChecklist.map(i => i.category));
+      const ordered = this.ROADMAP_CATEGORIES.filter(c => present.has(c));
+      for (const c of present) if (!this.ROADMAP_CATEGORIES.includes(c)) ordered.push(c);
+      return ordered;
+    },
+    roadmapProgress() {
+      const total = this.launchChecklist.length;
+      const done = this.launchChecklist.filter(i => i.status === 'done').length;
+      return { done, total, pct: total ? Math.round(done / total * 100) : 0 };
+    },
+    roadmapCatProgress(cat) {
+      const items = this.roadmapItemsIn(cat);
+      return { done: items.filter(i => i.status === 'done').length, total: items.length };
+    },
+    roadmapOwnerName(email) {
+      if (!email) return 'unassigned';
+      const u = (this.config.users || []).find(x => x.email === email);
+      return u ? u.displayName : email.split('@')[0];
+    },
+    roadmapStatusLabel(s) { return (this.ROADMAP_STATUSES.find(x => x.id === s) || {}).label || 'To do'; },
+    roadmapStatusClass(s) {
+      return {
+        done: 'text-emerald-400 bg-emerald-500/10',
+        in_progress: 'text-amber-400 bg-amber-500/10',
+        blocked: 'text-rose-400 bg-rose-500/10',
+        todo: 'text-gray-400 bg-gray-500/10',
+      }[s] || 'text-gray-400 bg-gray-500/10';
+    },
+    setRoadmapStatus(item, status) {
+      if (!this.canEditRoadmap()) return;
+      item.status = status;
+      this.save('launchChecklist');
+    },
+    toggleRoadmapDone(item) {
+      if (!this.canEditRoadmap()) return;
+      item.status = item.status === 'done' ? 'todo' : 'done';
+      this.save('launchChecklist');
+    },
+    addRoadmapItem() {
+      if (!this.canEditRoadmap() || !this._guard('addRoadmapItem')) return;
+      const title = (this.roadmapDraft.title || '').trim();
+      if (!title) return;
+      this.launchChecklist.push({
+        id: this.nextId(),
+        title,
+        category: this.roadmapDraft.category || 'Launch Ops',
+        owner_email: this.roadmapDraft.owner_email || '',
+        status: 'todo',
+        created_at: new Date().toISOString(),
+      });
+      this.roadmapDraft = { title: '', category: this.roadmapDraft.category, owner_email: '' };
+      this.showRoadmapForm = false;
+      this.save('launchChecklist');
+    },
+    removeRoadmapItem(item) {
+      if (!this.canEditRoadmap()) return;
+      this.launchChecklist = this.launchChecklist.filter(i => i.id !== item.id);
+      this.save('launchChecklist');
+    },
+
     VISIBILITY: {
-      ceo: ['ceo','pm','dev','qa','qa_auditor','settings'],
-      pm: ['pm','dev','qa','qa_auditor','settings'],
-      dev: ['dev','qa','qa_auditor'],
-      qa: ['dev','qa','qa_auditor'],
-      qa_auditor: ['ceo','pm','dev','qa','qa_auditor','settings'],
+      ceo: ['ceo','pm','dev','qa','qa_auditor','roadmap','settings'],
+      pm: ['pm','dev','qa','qa_auditor','roadmap','settings'],
+      dev: ['dev','qa','qa_auditor','roadmap'],
+      qa: ['dev','qa','qa_auditor','roadmap'],
+      qa_auditor: ['ceo','pm','dev','qa','qa_auditor','roadmap','settings'],
       // Viewer role — non-dev staff (Designer / CS / Finance / interns). Read-only CEO view.
-      viewer: ['ceo'],
+      viewer: ['ceo','roadmap'],
     },
     visibleRoleTabs() { return this.VISIBILITY[this.currentUser?.role] || []; },
     // U04 FIX — default landing tab matches user's own role, not VISIBILITY[0] (which is 'dev' for QA / QA Auditor)
@@ -4261,7 +4448,7 @@ function devdash() {
       return target && tabs.includes(target) ? target : tabs[0];
     },
 
-    roleLabel(r) { return { ceo:'CEO', pm:'PM', dev:'Dev', qa:'QA', qa_auditor:'QA Auditor', viewer:'Viewer', settings:'Settings' }[r] || r; },
+    roleLabel(r) { return { ceo:'CEO', pm:'PM', dev:'Dev', qa:'QA', qa_auditor:'QA Auditor', viewer:'Viewer', roadmap:'Roadmap', settings:'Settings' }[r] || r; },
     roleColor(r) { return { ceo:'bg-amber-500/20 text-amber-400', pm:'bg-blue-500/20 text-blue-400', dev:'bg-emerald-500/20 text-emerald-400', qa:'bg-purple-500/20 text-purple-400', qa_auditor:'bg-rose-500/20 text-rose-400', viewer:'bg-gray-500/20 text-gray-400' }[r] || 'bg-gray-500/20 text-gray-400'; },
     roleBadge(r) { return { ceo:'bg-amber-500/10 text-amber-400', pm:'bg-blue-500/10 text-blue-400', dev:'bg-emerald-500/10 text-emerald-400', qa:'bg-purple-500/10 text-purple-400', qa_auditor:'bg-rose-500/10 text-rose-400', viewer:'bg-gray-500/10 text-gray-400' }[r]; },
 
