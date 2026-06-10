@@ -65,6 +65,7 @@ const LOGIN_FORM = `<!DOCTYPE html>
   <input type="text" name="code" id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" placeholder="123456">
   <button type="submit">Sign in</button>
   <div class="footer">Trouble signing in? Ask Fahad to re-issue your QR.</div>
+  <div class="footer" style="opacity:.45">deploy-probe DP-20260609-A · temporary, remove after test</div>
 </form>
 </body>
 </html>`;
